@@ -18,7 +18,7 @@ everything needed to set up and test the controller.
 | Firmware as delivered | MKS `V2.2.6`, captured in `records/`. It is set up as a laser engraver and has no stop input |
 | Serial link, status parsing, simulator | Working, covered by automated tests |
 | `probe` bench tool (T2) | Run on the board |
-| `monitor` bench tool (T3) | Working against the simulator; not yet run on the board |
+| `monitor` bench tool (T3) | Run on the board with nothing connected; the test with the switches is still to do |
 | Firmware choice, motion, homing, stop handling, operator workflow | Not started |
 
 ## Quick start

@@ -21,7 +21,7 @@ rail, but our board does not run from USB (section 4).
 | Controller | MKS DLC32 V2.2, ESP32 module, CH340C USB-serial chip | seen (silkscreen) |
 | Firmware as delivered | MKS `V2.2.6(8M.H35.20241121)`, Grbl 1.1h protocol, 3 axes | seen (T2 record) |
 | Stepper drivers | 3 plug-in modules, TMC2209-LA, 0.11 ohm sense resistors, blue heatsinks | seen on the X module; Y and Z assumed identical |
-| Screen | MKS TS35-R V2.0 on the two EXP ribbon cables. Stayed dark at first power-up: open item | seen |
+| Screen | MKS TS35-R V2.0 (board marked 002) on the two EXP ribbon cables. Works once each ribbon is on the right socket (section 5) | seen |
 | Fan | on the 2-pin `-12/24V+` header; runs on the 12 V supply | seen |
 | Power supply | 12 V, 2.5 A adapter on the DC jack | seen (label) |
 | Test motor | Prusa MMU2S "Pulley" NEMA17, 1.8 deg/step (stand-in for the machine's motors) | seen |
@@ -153,7 +153,54 @@ DC jack 12-24 V --> 10 A fuse --> motor supply --> drivers, fan header, spindle 
   be close to its limit, and a stepper loses torque earlier at 12 V than at 24 V; bench test
   T6 measures what the rotation motor can do on this supply.
 
-## 5. Planned lathe wiring
+## 5. Screen and ribbon cables
+
+The MKS TS35-R V2.0 connects with two identical 10-wire ribbons, and nothing stops them from
+being plugged into each other's sockets. The screen's drawings are published
+(`MKS TS35-R V2.0_002` in <https://github.com/makerbase-mks/MKS-TFT-Hardware>).
+
+| | EXP1 | EXP2 |
+| --- | --- | --- |
+| Carries | buzzer, backlight on/off, touch and display select lines, 5 V | display data lines (MISO, SCK, MOSI), reset, 3.3 V |
+| On the screen, held back-up with the buzzer at the top left | upper socket | lower socket |
+| On the controller | the socket next to the ESP32 module | the socket at the board corner, above the SD card slot |
+
+The ribbon from the screen's EXP1 must end in the controller's EXP1. The screen-side positions
+are from the screen's drawing; the controller-side positions are **V2.1** and agree with the
+arrangement that works on our board.
+
+**Seen on 2026-11-13:** with the two ribbons swapped the firmware ran normally and answered
+over USB, but the screen stayed completely dark and its buzzer ticked about twice a second.
+Swapped, the backlight line and the buzzer line end on pins that nothing drives. With the
+ribbons corrected the screen lit. On our screen the resistor position that joins EXP2's 3.3 V
+pin to the screen's own 3.3 V circuit (R8) looks empty, so the swap should not have put 5 V
+onto that circuit.
+
+## 6. Limit switches
+
+Three red "Mech Endstop" style modules: a lever microswitch, an LED with a 1 k resistor (R1),
+a 10 k resistor (R2), a capacitor (C1) and a 4-pin white connector, each with a 3-wire cable.
+
+Traced from photos of our module and from the MakerBot design it copies; bench test T3
+confirms it:
+
+| Wire | Module | Switch terminal |
+| --- | --- | --- |
+| red | supply (5 V) | NC |
+| black | ground (the two middle pins of the connector) | NO |
+| green | signal | COM |
+
+- At rest the signal is connected to the supply and reads 5 V. Pressed, it is connected to
+  ground and reads 0 V, and the LED lights.
+- That is the polarity the firmware as delivered expects (`$5=1`): the input should show as
+  active only while the switch is pressed.
+- The controller end of the cable is a plain 3-pin jumper plug with no key, in the order
+  green, black, red. It fits either way round. Reversed, pressing the switch connects the
+  controller's 5 V pin straight to ground.
+- So the 5 V pin of a limit header is identified first, with a two-wire check that cannot
+  short anything (the pre-check in bench test T3).
+
+## 7. Planned lathe wiring
 
 A proposal, to be confirmed together with the firmware choice and the mechanical layout.
 
@@ -167,7 +214,7 @@ A proposal, to be confirmed together with the firmware choice and the mechanical
 This keeps the axis names used in the design reports, and leaves the X limit input free
 because a rotating axis has no end to find.
 
-## 6. Test motor
+## 8. Test motor
 
 The Prusa MMU2S pulley motor is rated 1 A per phase and ends in a 4-way Molex 50-57-9404
 plug (2.54 mm pitch). It does not latch into the board's motor header, so it is connected with
@@ -193,21 +240,23 @@ The test motor stands in for the machine's motors to prove wiring, logic and the
 sequence. Speeds, steps per millimetre and directions are measured again on the machine,
 which is why they live in configuration and not in code.
 
-## 7. Handling rules
+## 9. Handling rules
 
 1. Unplug the DC supply before connecting or disconnecting anything: a motor, a driver
    module, a limit switch, a ribbon cable.
 2. Never plug or unplug a motor or a driver while the supply is on. It can destroy the driver.
 3. Driver modules go in green row to green row (section 3).
-4. Limit switch cables: match `5V / GND / S` on both the board and the switch module. A 3-pin
-   jumper-style plug fits either way round, and reversed it puts 5 V straight across the
-   switch contacts, which is a short circuit when the switch closes. Connect one switch at a
-   time and watch the `5V` LED when power comes back on.
-5. Until the driver current has been measured, keep motor runs short and check by hand that
+4. Limit switch cables: the red wire goes on the header's 5 V pin, green on `S`, black in the
+   middle (section 6). The plug fits either way round, and reversed it shorts the 5 V supply
+   whenever the switch is pressed. Connect one switch at a time and watch the `5V` LED when
+   power comes back on.
+5. Screen ribbons: EXP1 to EXP1 and EXP2 to EXP2 (section 5). A dark screen with a ticking
+   buzzer means they are swapped: unplug the supply and correct them.
+6. Until the driver current has been measured, keep motor runs short and check by hand that
    the motor and the driver heatsinks stay comfortable to touch.
-6. Keep fingers, sleeves and cables away from the motor shaft and its gears when it is powered.
+7. Keep fingers, sleeves and cables away from the motor shaft and its gears when it is powered.
 
-## 8. To be recorded
+## 10. To be recorded
 
 | Item | Value |
 | --- | --- |
@@ -219,7 +268,8 @@ which is why they live in configuration and not in code.
 | DIP switches, Y and Z | **TBD** - found by measurement in T5 |
 | Vref, X / Y / Z | **TBD** (needs a multimeter) |
 | Firmware as delivered | `V2.2.6(8M.H35.20241121)`, see `records/20261113-161720_probe.txt` |
-| Limit header pin order on V2.2 | **TBD** (bench test T3) |
-| Limit switch module: output when pressed, LED when pressed | **TBD** (bench test T3) |
-| Screen: why it stays dark | **TBD** |
+| Limit header pin order on V2.2 | **TBD** (pre-check in bench test T3) |
+| Limit switch module: output when pressed, LED when pressed | expected 0 V and LED on (section 6); **TBD** confirm in T3 |
+| Screen: why it stayed dark | the two ribbons were swapped; corrected (section 5) |
+| X driver module after it was taken out | put back before power-on, same way round as Y and Z |
 | Does the serial port disappear when the supply is unplugged | **TBD** |

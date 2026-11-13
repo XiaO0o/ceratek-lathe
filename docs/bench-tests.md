@@ -42,6 +42,8 @@ Detailed steps for T4 onward are written as each earlier test settles what they 
 | DIP switches under the Y and Z drivers | not looked at; T5 measures the result instead |
 | Motor plug wire order | blue, red, green, black |
 | On-board power switch | none: the `SWICTH` pads are empty, the red part is the 10 A fuse |
+| X driver module | put back before power-on; sits the same way round as Y and Z |
+| Limit switch cable | red = supply, black = ground, green = signal; plain 3-pin plug with no key at the controller end |
 | Fan voltage | open: label not read (it runs on the 12 V supply) |
 | Driver current (Vref) | open: needs a multimeter |
 
@@ -80,7 +82,7 @@ contains the `$$` settings list and a status report.
 | Boot text | none: the controller did not restart when the port was opened |
 | Identity | `[PRODUCER:MKS DLC32]` `[V2.2.6(8M.H35.20241121)]` `[VER:1.1h.2024112101:]` `[OPT:VMPH,63,512]` |
 | Status | `<Idle\|MPos:0.000,0.000,0.000\|FS:0,0\|Pn:P\|WCO:0.000,0.000,0.000>` |
-| Screen | stayed dark although the firmware was running: open item |
+| Screen | dark at first, with its buzzer ticking twice a second, although the firmware was running: the two ribbons were swapped. It lit once they were corrected |
 
 What the settings as delivered mean for the lathe:
 
@@ -104,14 +106,34 @@ was opened; the probe now writes a line saying so.
 
 **Needs:** T2 passed. The 12 V supply, USB, the three limit switches and their cables. No motor.
 
-Before the first switch is connected, the pin order of the limit headers on this V2.2 board
-and of the switch module's cable has to be established, because a reversed plug shorts the
-5 V supply (hardware.md, handling rule 4).
+### Pre-check: which pin of the limit header is 5 V
 
-1. Supply unplugged. Connect **one** switch to the `X` header, matching `5V / GND / S`.
+The pin order of the V2.2 limit headers is not published, and the cable's plug fits either
+way round; reversed, it shorts the 5 V supply when the switch is pressed (hardware.md,
+section 6). So the 5 V pin is found first, with two wires only. Every path in this check
+runs through the module's 1 k resistor, so a wrong guess cannot short anything.
+
+1. Supply unplugged. Push two male-female jumper wires into the red and the black position
+   of the cable's 3-pin plug. Leave the green position empty.
+2. Put the black jumper on the **middle** pin of the `X` header, and the red jumper on the
+   outer pin on the motor-header side (where the V2.1 drawing has 5 V).
+3. Plug the supply in and press the switch lever. The LED on the module lights clearly while
+   the lever is pressed if, and only if, the red jumper sits on the 5 V pin.
+4. No light: unplug the supply, move the red jumper to the other outer pin, and try again.
+
+| Outer pin of the `X` header | LED while pressed |
+| --- | --- |
+| on the motor-header side | |
+| on the ESP32 side | |
+
+### The test
+
+1. Supply unplugged. Remove the jumpers and plug the cable's 3-pin plug onto the `X` header
+   with the red wire on the 5 V pin just found. Green then sits on `S`.
 2. Plug the supply in. Check that the `5V` LED is still lit. If it is not, unplug at once.
 3. Run `python -m lathe monitor`.
-4. Note what is listed as active with nothing pressed.
+4. Note what is listed as active with nothing pressed. With the firmware as delivered that
+   should be `P` only (seen on 2026-11-13 with nothing connected).
 5. Press and hold the switch for a second and release it. Watch which letter appears (`+`)
    and disappears (`-`), and whether the LED on the switch lights.
 6. Stop with Ctrl-C. Unplug the supply, add the next switch on `Y`, and repeat; then `Z`.
