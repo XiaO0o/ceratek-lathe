@@ -24,6 +24,11 @@ from .sim import SimulatedGrbl
 # Read-only queries. A firmware that lacks one answers "error:3", which is recorded as such.
 PROBE_COMMANDS = ("$I", "$$", "$S", "$G", "$#", "$N", "$CMD")
 
+BOOT_SECTION = "boot (after opening the port)"
+# Whether opening the port restarts the ESP32 depends on the computer's serial
+# driver. Our board on macOS does not restart, so there is no boot text to keep.
+NO_RESTART = "(nothing: the controller did not restart when the port was opened)"
+
 
 @dataclass(frozen=True)
 class Timing:
@@ -79,9 +84,9 @@ def run_probe(link: GrblLink, commands=PROBE_COMMANDS, timing: Timing = Timing()
     boot = wait_until_ready(link, timing)
     if boot is None:
         heard = [text for direction, text in link.transcript if direction == "<"]
-        return ProbeResult([("boot (after opening the port)", heard)], responding=False)
+        return ProbeResult([(BOOT_SECTION, heard)], responding=False)
 
-    sections = [("boot (after opening the port)", boot)]
+    sections = [(BOOT_SECTION, boot or [NO_RESTART])]
     for command in commands:
         try:
             reply = link.command(command, timeout=timing.command_timeout)
@@ -124,13 +129,12 @@ def _probe(args) -> int:
         return 3
 
     lines_by_section = dict(result.sections)
-    boot = lines_by_section["boot (after opening the port)"]
-    banner = next((line for line in boot if line.lower().startswith("grbl")), "(no Grbl banner seen)")
-    version = next((line for line in lines_by_section["$I"] if line.startswith("[VER")), "(no [VER:] line)")
+    banner = next((line for line in lines_by_section[BOOT_SECTION] if line.lower().startswith("grbl")), None)
+    identity = [line for line in lines_by_section["$I"] if line.startswith("[") and not line.startswith("[MSG")]
     settings = [line for line in lines_by_section["$$"] if line.startswith("$")]
     print("The controller answered.")
-    print(f"  banner   : {banner}")
-    print(f"  version  : {version}")
+    print(f"  banner   : {banner or 'none (the controller did not restart when the port was opened)'}")
+    print(f"  identity : {' '.join(identity) or '(nothing recognisable in the $I reply)'}")
     print(f"  settings : {len(settings)} numbered settings read")
     if result.status:
         print(f"  state    : {result.status.state}, active inputs: {_pin_list(result.status.pins)}")

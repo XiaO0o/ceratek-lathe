@@ -5,7 +5,7 @@ refinement lathe (University of Ottawa, GNG5140, Group 3).
 
 The lathe turns a fired ceramic tube while a blade is fed along it, to bring the wall to a
 chosen thickness. Three stepper motors do the work - tube rotation, feed along the tube (Z)
-and depth of cut (Y) - driven by an MKS DLC32 V2.1 controller with TMC2209 drivers. A computer
+and depth of cut (Y) - driven by an MKS DLC32 V2.2 controller with TMC2209 drivers. A computer
 on USB tells the controller what to do. This repository holds that computer-side software and
 everything needed to set up and test the controller.
 
@@ -13,10 +13,12 @@ everything needed to set up and test the controller.
 
 | Area | State |
 | --- | --- |
-| Controller pin map and wiring rules | Checked against the manufacturer's drawings: [docs/hardware.md](docs/hardware.md) |
-| Bench test plan, T0 to T9 | Written; results are filled in as the tests are run: [docs/bench-tests.md](docs/bench-tests.md) |
+| Controller pin map and wiring rules | [docs/hardware.md](docs/hardware.md). Our board is a V2.2 and the published drawings stop at V2.1, so each fact is marked as seen on the board or taken from the V2.1 drawings |
+| Bench test plan, T0 to T9 | [docs/bench-tests.md](docs/bench-tests.md). T0 and T2 done; T3 (limit inputs) is next |
+| Firmware as delivered | MKS `V2.2.6`, captured in `records/`. It is set up as a laser engraver and has no stop input |
 | Serial link, status parsing, simulator | Working, covered by automated tests |
-| `probe` and `monitor` bench tools (tests T2, T3) | Working against the simulator; not yet run on the board |
+| `probe` bench tool (T2) | Run on the board |
+| `monitor` bench tool (T3) | Working against the simulator; not yet run on the board |
 | Firmware choice, motion, homing, stop handling, operator workflow | Not started |
 
 ## Quick start
@@ -31,7 +33,7 @@ python -m pytest -q                # needs no hardware
 python -m lathe probe --sim        # try a tool against the built-in simulator
 ```
 
-With the controller connected by USB:
+With the controller powered from its 12 V supply (it does not run from USB) and connected by USB:
 
 ```bash
 python -m lathe ports              # which serial port is the controller?
@@ -40,7 +42,6 @@ python -m lathe monitor            # T3: watch the limit / probe inputs while pr
 ```
 
 These tools only ask the controller questions. They do not move a motor or change a setting.
-Opening the port restarts the controller, as it does with any serial program.
 
 ## Layout
 
