@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+build/
+dist/
+
+# Firmware images and flash backups. A flash backup contains whatever Wi-Fi
+# name and password were stored on the board, so it must never be committed.
+*.bin
+*.elf
+backups/
+
+# Scratch captures; committed test evidence goes in records/
+logs/
+
+# Editors and OS
+.DS_Store
+.idea/
+.vscode/

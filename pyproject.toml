@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ceratek-lathe"
+dynamic = ["version"]
+description = "Host-side control software for the Ceratek ceramic tube refinement lathe"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["pyserial>=3.5"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+lathe = "lathe.cli:main"
+
+[tool.setuptools]
+packages = ["lathe"]
+
+[tool.setuptools.dynamic]
+version = { attr = "lathe.__version__" }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
