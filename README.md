@@ -21,7 +21,8 @@ everything needed to set up and test the controller.
 | `monitor` bench tool (T3) | Run on the board |
 | Firmware | FluidNC v4.1.1 flashed on 2026-11-14 with [firmware/fluidnc/config.yaml](firmware/fluidnc/config.yaml); it started without a configuration error. The limit, stop and motor tests have to be repeated under it |
 | Pass planning (depths, moves of a pass, correction from the measured diameter) | Written and tested without hardware; no move has been run from it yet |
-| Machine driver, stop handling in software, operator workflow | Not started |
+| Machine driver: homing, sending a pass, stop and restart rules | Written and tested against the simulator, which copies the stop behaviour seen on the bench; not yet run on the board |
+| Operator workflow (the guided sequence with the four entries) | Not started |
 
 ## Quick start
 
@@ -54,6 +55,7 @@ lathe/            the Python package
   ports.py        finding the controller's serial port
   sim.py          an in-memory stand-in for the controller, for tests and dry runs
   records.py      saving captures as text, with network details masked
+  machine.py      runs the lathe: homing, sending a pass, stop and restart rules
   passes.py       from the operator's diameters to the moves of one cutting pass
   settings.py     reads the cutting parameters from config/lathe.toml
   cli.py          the command line (python -m lathe ...)
