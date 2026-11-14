@@ -255,7 +255,9 @@ which is why they live in configuration and not in code.
 4. Limit switch cables: the red wire goes on the header's 5 V pin, green on `S`, black in the
    middle (section 6). The plug fits either way round, and reversed it shorts the 5 V supply
    whenever the switch is pressed. Connect one switch at a time and watch the `5V` LED when
-   power comes back on.
+   power comes back on. A plug that is not fully seated can make the input read active
+   all the time, with the switch's LED off (seen on 2026-11-14). On the machine these cables
+   need latching plugs or crimped terminals.
 5. Screen ribbons: EXP1 to EXP1 and EXP2 to EXP2 (section 5). A dark screen with a ticking
    buzzer means they are swapped: unplug the supply and correct them.
 6. Until the driver current has been measured, keep motor runs short and check by hand that

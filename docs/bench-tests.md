@@ -23,7 +23,7 @@ T3 are done with **no motor connected**, so nothing can move.
 | T6 Speed envelope | highest reliable speed, temperature rise | speed and acceleration limits of the rotation axis | | | |
 | T7 Homing sequence | search, trigger, pull-off, slow re-approach, failure alarm | homing and alarm handling | 2026-11-14 | **pass** for Y by hand, no motor; failure alarm and Z not done | `records/20261114_t7_home_y.txt` |
 | T8 Stop and recovery | stop halts motion, locks commands, needs a deliberate restart | the stop state machine (tasks X1-X3) | 2026-11-14 | **pass** for the stop input; feed hold and power cut not compared yet | `records/20261114_t8_estop_motor_seated.txt` |
-| T9 One pass, dry | plunge, feed and retract follow each other with no pause in rotation | the pass generator | | | |
+| T9 One pass, dry | plunge, feed and retract follow each other with no pause in rotation | the pass generator | 2026-11-14 | **pass** on the controller side with the rotation motor; Y and Z had no motors | `records/20261114_t9_dry_pass.txt` |
 
 Detailed steps for T4 onward are written as each earlier test settles what they depend on.
 
@@ -349,4 +349,44 @@ pressed by hand in place of the carriage. Record: `records/20261114_t7_home_y.tx
   limit outside homing: touching it stops the machine and needs a reset.
 - Not done: letting the search run out to see the failure alarm, homing Z, and homing with
   a motor actually moving a carriage.
+
+**Homing failures, 2026-11-14.** Run through the machine driver (`lathe/machine.py`, on the
+`feature/pass-planner` branch). Record: `records/20261114_t7_homing_failures.txt`.
+
+- Y switch never pressed: the search stopped after 110 mm (the 100 mm travel times 1.1),
+  `ALARM:9`. The driver reported "switch not found within the search distance" and did not
+  go on to cut.
+- Y switch still held when the pull-off ended: `ALARM:8`, reported as "switch still triggered
+  after pull-off".
+
+Homing by hand depends on how long the switch is held, and several attempts failed for that
+reason. A full Y-then-Z homing through the driver has not succeeded on the bench; it is left
+for the machine, where the carriage presses and releases the switch itself.
+
+**A limit input stuck active, 2026-11-14.** For a while the Y input read active with the
+switch untouched and its LED off, which made every homing attempt fail. Re-seating the plug
+did not cure it; after the Y and Z cables were swapped on the board both inputs read
+correctly. Neither a switch nor the board input was faulty: the plain 3-pin plug had not
+been seated on the header. Together with the loose motor wire this is the third contact
+fault of the day. The machine needs latching plugs or crimped terminals on the limit
+switches as well as on the motors.
+
+**One pass, dry (T9), 2026-11-14: pass on the controller side.** The pass planner's first
+pass (10.6 mm to 10.0 mm, 0.05 mm deep, length shortened to 10 mm) was sent by the machine
+driver with the motor on `X-Motor`. Homing was bypassed in the test script, for the bench
+only, after a restart had set all positions to zero. Record: `records/20261114_t9_dry_pass.txt`.
+
+| Move | Sent | Result |
+| --- | --- | --- |
+| spin up | 2 turns | |
+| plunge | 5 turns while Y moves +1.05 mm | |
+| feed | 100 turns while Z moves +10 mm | |
+| retract | 5 turns while Y moves -1.05 mm | |
+| return | Z -10 mm, no rotation | |
+| whole pass | 112 turns planned in 112 s | the controller was in `Run` without a break for 113 s and ended `Idle` at X 112.000, Y 0.000, Z 0.000 |
+
+- The controller accepted inverse-time moves (G93) that combine turns of the tube with
+  millimetres of travel, and ended exactly where the plan says.
+- What the shaft did during the 113 s is filled in from the operator's observation.
+- Not shown: that Y and Z really move, since they had no motors.
 
