@@ -21,7 +21,7 @@ T3 are done with **no motor connected**, so nothing can move.
 | T4 First motor movement | each driver socket turns the motor both ways | jog commands | 2026-11-13 | **pass** | below |
 | T5 Steps per revolution | the real microstep setting | steps-per-mm and steps-per-rev values | | | |
 | T6 Speed envelope | highest reliable speed, temperature rise | speed and acceleration limits of the rotation axis | | | |
-| T7 Homing sequence | search, trigger, pull-off, slow re-approach, failure alarm | homing and alarm handling | | | |
+| T7 Homing sequence | search, trigger, pull-off, slow re-approach, failure alarm | homing and alarm handling | 2026-11-14 | **pass** for Y by hand, no motor; failure alarm and Z not done | `records/20261114_t7_home_y.txt` |
 | T8 Stop and recovery | stop halts motion, locks commands, needs a deliberate restart | the stop state machine (tasks X1-X3) | 2026-11-14 | **pass** for the stop input; feed hold and power cut not compared yet | `records/20261114_t8_estop_motor_seated.txt` |
 | T9 One pass, dry | plunge, feed and retract follow each other with no pause in rotation | the pass generator | | | |
 
@@ -330,4 +330,23 @@ about 4 turns and held about 7 s. The motor stopped at once (seen). The controll
 after its release, and returned to `Idle` only after a soft reset.
 Record: `records/20261114_t8_estop_motor_seated.txt`. The earlier run with the loose wire is
 kept only as a void record.
+
+**Y homing by hand, 2026-11-14: pass (no motor on Y).** `$HY` was sent and the Y switch
+pressed by hand in place of the carriage. Record: `records/20261114_t7_home_y.txt`.
+
+| Time | What the controller did |
+| --- | --- |
+| 0 s | `Home`, moving toward the switch at 300 mm/min |
+| 1.0 s | first press seen: stopped, then backed off 2 mm |
+| 4.4 s | second press seen during the slow approach: stopped, backed off 2 mm |
+| 6.9 s | `[MSG:Homed:Y]`, `Idle`, Y position set to 0 |
+| 8.5 s | a third press, after homing: `ALARM:1` hard limit, "Reset to continue" |
+
+- The sequence is search, stop on the switch, back off, slow approach, stop, back off, as
+  planned. The slow approach only lasts about 2 s, so on the bench the second press has to
+  follow within that time.
+- The third press was not planned, and shows that the limit switch also works as a hard
+  limit outside homing: touching it stops the machine and needs a reset.
+- Not done: letting the search run out to see the failure alarm, homing Z, and homing with
+  a motor actually moving a carriage.
 
