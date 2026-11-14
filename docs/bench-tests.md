@@ -387,6 +387,7 @@ only, after a restart had set all positions to zero. Record: `records/20261114_t
 
 - The controller accepted inverse-time moves (G93) that combine turns of the tube with
   millimetres of travel, and ended exactly where the plan says.
-- What the shaft did during the 113 s is filled in from the operator's observation.
+- Seen at the motor: it turned smoothly for the whole 113 s, with no pause between the
+  spin-up, plunge, feed and retract moves.
 - Not shown: that Y and Z really move, since they had no motors.
 
