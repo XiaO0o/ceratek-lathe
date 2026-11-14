@@ -256,3 +256,14 @@ high the driver current is. The configuration now releases the motors when idle
 (`idle_ms: 250`) until the driver current has been measured and set. The copy on the board
 still has the old value until the file is uploaded again.
 
+**Inputs under FluidNC, 2026-11-14: pass.** With the corrected configuration on the board
+(startup log: `Idle Delay:250ms`), Y, Z and the stop switch on the `X` header were pressed
+three times each. FluidNC reported `Y`, `Z` and `E` respectively, each press and release
+once, nothing active at rest. Record: `records/20261114_t3_monitor_fluidnc.txt`.
+Unplugging the 12 V supply was also seen to remove the serial port from the computer.
+
+**Not yet shown:** that the stop input locks the machine. The presses above were made while
+the controller was already in the start-up alarm; afterwards `$X` unlocked it and a jog
+command was accepted. The stop test proper (T8) has to press the switch while the machine
+is unlocked and moving, and try to unlock while it is held.
+
