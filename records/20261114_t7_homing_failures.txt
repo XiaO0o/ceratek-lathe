@@ -1,0 +1,15 @@
+# Homing failures reported by lathe.machine on the bench (bench test T7), FluidNC v4.1.1
+# captured: 2026-11-14. No motors on Y and Z; switches pressed by hand.
+
+## Y switch never pressed: search runs out
+   2.5s start: <Alarm|MPos:53.222,0.000,0.000|FS:0,0>
+  24.7s STOPPED/ERROR: Homing was stopped: alarm 9: homing fail: switch not found within the search distance. Recover and home before continuing.
+  24.7s state: <Alarm|MPos:53.222,-110.000,0.000|FS:0,0>
+  24.7s controller messages: ['[MSG:INFO: ALARM: Homing Fail Approach]', 'ALARM:9']
+
+## Y switch still pressed after the pull-off
+   2.6s start: <Alarm|MPos:0.000,0.000,0.000|FS:0,0|Ov:100,100,100>
+  10.4s start signal given (quarter turn of the motor)
+  20.2s STOPPED/ERROR: Homing was stopped: alarm 8: homing fail: switch still triggered after pull-off. Recover and home before continuing.
+  20.2s state: <Alarm|MPos:0.250,-35.085,0.000|FS:0,0|Pn:Y>
+  20.2s controller messages: ['[MSG:INFO: Caution: Unlocked]', '[MSG:INFO: ALARM: Homing Fail Pulloff]', 'ALARM:8']
