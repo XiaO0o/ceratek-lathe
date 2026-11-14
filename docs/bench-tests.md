@@ -292,3 +292,10 @@ Two things the control software has to handle:
 Still open for T8: the same test with a motor turning, the comparison with a feed hold, and
 the stopping time.
 
+**Motor under FluidNC, 2026-11-14: X pass; Y and Z not repeated.** With the motor back on
+`X-Motor`, `$J=G91 X1 F10` and its reverse turned it one full turn and back (seen), and after
+stopping the shaft could be turned by hand, so the idle release works. The Y and Z outputs
+were not re-tested with a motor under FluidNC, by the team's decision; their pin numbers are
+the V2.1 ones that FluidNC accepted, and both sockets worked under the firmware as delivered.
+They are checked when the machine's own motors are connected.
+
