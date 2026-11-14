@@ -20,11 +20,12 @@ everything needed to set up and test the controller.
 | `probe` bench tool (T2) | Run on the board |
 | `monitor` bench tool (T3) | Run on the board |
 | Firmware | FluidNC v4.1.1 flashed on 2026-11-14 with [firmware/fluidnc/config.yaml](firmware/fluidnc/config.yaml); it started without a configuration error. The limit, stop and motor tests have to be repeated under it |
-| Motion, homing, stop handling, operator workflow | Not started |
+| Pass planning (depths, moves of a pass, correction from the measured diameter) | Written and tested without hardware; no move has been run from it yet |
+| Machine driver, stop handling in software, operator workflow | Not started |
 
 ## Quick start
 
-Python 3.10 or newer.
+Python 3.11 or newer.
 
 ```bash
 python3 -m venv .venv
@@ -53,7 +54,11 @@ lathe/            the Python package
   ports.py        finding the controller's serial port
   sim.py          an in-memory stand-in for the controller, for tests and dry runs
   records.py      saving captures as text, with network details masked
+  passes.py       from the operator's diameters to the moves of one cutting pass
+  settings.py     reads the cutting parameters from config/lathe.toml
   cli.py          the command line (python -m lathe ...)
+config/           cutting parameters (speeds, depths, directions)
+firmware/         the FluidNC configuration that runs on the controller
 docs/             hardware notes and the bench test plan
 records/          captures from real test runs, committed as evidence
 tests/            automated tests (python -m pytest)
