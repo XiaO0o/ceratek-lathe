@@ -299,3 +299,10 @@ were not re-tested with a motor under FluidNC, by the team's decision; their pin
 the V2.1 ones that FluidNC accepted, and both sockets worked under the firmware as delivered.
 They are checked when the machine's own motors are connected.
 
+**Stop input with the motor turning, 2026-11-14.** Motor on `X-Motor` at 60 rev/min
+(`$J=G91 X30 F60`); the stop switch was pressed after 21.7 turns and held about 6 s.
+The controller behaved exactly as without a motor: `Alarm` and `ALARM:13` at once, no unlock,
+jog or homing accepted while held or after release, `Idle` again only after a soft reset.
+Record: `records/20261114_t8_estop_motor.txt`. What the shaft did at the moment of the press
+is filled in from the operator's observation.
+

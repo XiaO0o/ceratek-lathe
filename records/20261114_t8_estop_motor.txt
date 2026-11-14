@@ -1,0 +1,23 @@
+# Stop input under FluidNC v4.1.1 with the motor turning (bench test T8)
+# captured: 2026-11-14. Motor on X-Motor at 60 rev/min; the stop switch on the X header was pressed about 22 s in and held about 6 s.
+
+  2.54s send '$X' -> ok []
+  2.55s status <Idle|MPos:0.000,31.795,0.000|FS:0,0>
+  2.56s send '$J=G91 X30 F60' -> ok []
+  2.67s STATE <Jog|MPos:0.012,31.795,0.000|FS:25,0>
+ 24.59s STATE <Alarm|MPos:21.720,31.795,0.000|FS:0,0|Pn:E>
+ 24.59s -- stop switch is held: trying to unlock and to jog
+ 26.62s send '$X' -> TIMEOUT ['[MSG:ERR: Reset to continue]', '[MSG:INFO: Stopped by estop_pin]']
+ 28.64s send '$J=G91 X1 F60' -> TIMEOUT []
+ 30.64s send '$H' -> TIMEOUT []
+ 30.75s STATE <Alarm|MPos:21.720,31.795,0.000|FS:0,0>
+ 30.75s -- stop switch released: trying to unlock and to jog WITHOUT a reset
+ 32.76s send '$X' -> TIMEOUT []
+ 34.77s send '$J=G91 X1 F60' -> TIMEOUT []
+ 34.78s status <Alarm|MPos:21.720,31.795,0.000|FS:0,0>
+ 34.78s -- now a soft reset (Ctrl-X), then unlock
+ 37.30s status <Idle|MPos:21.720,31.795,0.000|FS:0,0|Ov:100,100,100>
+ 37.30s send '$X' -> ok []
+ 37.31s status <Idle|MPos:21.720,31.795,0.000|FS:0,0>
+ 37.42s STATE <Idle|MPos:21.720,31.795,0.000|FS:0,0>
+ 50.10s unsolicited: ['[MSG:INFO: Stopped by estop_pin]', '[MSG:INFO: ALARM: Hard Stop]', 'ALARM:13']
