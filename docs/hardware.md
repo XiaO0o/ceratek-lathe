@@ -44,7 +44,8 @@ Board seen from above with the motor headers at the top edge and the USB / DC so
 ```
 
 - The connector positions and names are **seen**. The limit header pin order is **seen**
-  (bench test T3). The motor header pin order is **V2.1** and still has to be confirmed (T4).
+  (bench test T3). The motor header pin order is **seen** to work as
+  drawn for V2.1 (bench test T4).
 - Motor headers: 4 pins, 2.54 mm pitch, order `2B 2A 1A 1B`. The two pins of one motor coil
   are next to each other (`2B 2A` is one coil, `1A 1B` the other).
 - `Y1-Motor` and `Y2-Motor` are wired to the same driver. The lathe uses `Y1-Motor` only.
@@ -265,7 +266,7 @@ which is why they live in configuration and not in code.
 | Fan label: voltage | **TBD** (runs on 12 V) |
 | Driver module | TMC2209-LA, 0.11 ohm sense resistors |
 | DIP switches, X (M0 M1 M2) | on, on, on |
-| DIP switches, Y and Z | **TBD** - found by measurement in T5 |
+| DIP switches, Y and Z | not looked at; all three sockets gave one turn for 3200 steps by eye (T4), so 16 microsteps |
 | Vref, X / Y / Z | **TBD** (needs a multimeter) |
 | Firmware as delivered | `V2.2.6(8M.H35.20241121)`, see `records/20261113-161720_probe.txt` |
 | Limit header pin order on V2.2 | `5V / GND / S` from the motor-header side, same as V2.1 (T3) |

@@ -15,10 +15,10 @@ T3 are done with **no motor connected**, so nothing can move.
 | Test | Proves | Feeds | Date | Result | Record |
 | --- | --- | --- | --- | --- | --- |
 | T0 Label check | what is actually on the bench | starting values for the configuration | 2026-11-13 | done, three items open | below |
-| T1 Motor coil pairs | how the test motor must be wired | wiring notes in hardware.md | | wire order known, pairs not yet checked | |
+| T1 Motor coil pairs | how the test motor must be wired | wiring notes in hardware.md | 2026-11-13 | settled by T4: wired straight through, the motor runs | |
 | T2 First power-up and firmware baseline | the serial link works; firmware identity and settings as delivered | serial link, status parsing, the baseline to return to | 2026-11-13 | **pass** | `records/20261113-161720_probe.txt` |
 | T3 Limit inputs | which header is which input, and its polarity | homing and stop configuration | 2026-11-13 | **pass** | `records/20261113_t3_monitor_xyz.txt` |
-| T4 First motor movement | each driver socket turns the motor both ways | jog commands | | | |
+| T4 First motor movement | each driver socket turns the motor both ways | jog commands | 2026-11-13 | **pass** | below |
 | T5 Steps per revolution | the real microstep setting | steps-per-mm and steps-per-rev values | | | |
 | T6 Speed envelope | highest reliable speed, temperature rise | speed and acceleration limits of the rotation axis | | | |
 | T7 Homing sequence | search, trigger, pull-off, slow re-approach, failure alarm | homing and alarm handling | | | |
@@ -169,6 +169,25 @@ earlier tests are completed.
 **T4 First motor movement.** Motor on `X-Motor`. Jog a small distance in each direction
 at low speed. Repeat on `Y1-Motor` and `Z-Motor`, unplugging the supply before each move of the plug.
 *Pass:* smooth rotation both ways on all three sockets, no buzzing or stalling.
+
+### T4 result, 2026-11-13: pass
+
+The motor plug was wired straight through (blue, red, green, black) with four jumper wires,
+to `X-Motor`, then `Y1-Motor`, then `Z-Motor`, with the supply unplugged for each change.
+On each socket the command `$J=G91 <axis>32 F300` and its reverse were sent.
+
+| Socket | Commanded | Seen at the shaft |
+| --- | --- | --- |
+| `X-Motor` | +32 then -32 units, 6.5 s each | one full turn anticlockwise, then one full turn back to the start; smooth and quiet |
+| `Y1-Motor` | +32 then -32 units | one full turn and back |
+| `Z-Motor` | +32 then -32 units | one full turn and back |
+
+- All three drivers work, and the motor header pin order on V2.2 is the V2.1 one.
+- 32 units at the delivered 100 steps per unit is 3200 steps, and that was one turn by eye:
+  16 microsteps on every socket, as the X DIP switches say. T5 still checks it over ten turns.
+- Motor and driver heatsinks stayed at a normal temperature after the X runs.
+- A first, quarter-turn jog on X was reported as "no movement" and then recognised as having
+  been missed by eye; the later runs were all seen.
 
 **T5 Steps per revolution.** Mark the shaft. Command the number of steps that should be exactly
 ten revolutions and check the mark returns to where it started.

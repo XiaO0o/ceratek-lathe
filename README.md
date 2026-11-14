@@ -14,7 +14,7 @@ everything needed to set up and test the controller.
 | Area | State |
 | --- | --- |
 | Controller pin map and wiring rules | [docs/hardware.md](docs/hardware.md). Our board is a V2.2 and the published drawings stop at V2.1, so each fact is marked as seen on the board or taken from the V2.1 drawings |
-| Bench test plan, T0 to T9 | [docs/bench-tests.md](docs/bench-tests.md). T0, T2 and T3 done; T1 and T4 (the motor) are next |
+| Bench test plan, T0 to T9 | [docs/bench-tests.md](docs/bench-tests.md). T0 to T4 done: the link, the limit inputs and all three motor drivers work. T5 and T6 are next |
 | Firmware as delivered | MKS `V2.2.6`, captured in `records/`. It is set up as a laser engraver and has no stop input |
 | Serial link, status parsing, simulator | Working, covered by automated tests |
 | `probe` bench tool (T2) | Run on the board |
