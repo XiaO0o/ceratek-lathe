@@ -303,6 +303,12 @@ They are checked when the machine's own motors are connected.
 (`$J=G91 X30 F60`); the stop switch was pressed after 21.7 turns and held about 6 s.
 The controller behaved exactly as without a motor: `Alarm` and `ALARM:13` at once, no unlock,
 jog or homing accepted while held or after release, `Idle` again only after a soft reset.
-Record: `records/20261114_t8_estop_motor.txt`. What the shaft did at the moment of the press
-is filled in from the operator's observation.
+Record: `records/20261114_t8_estop_motor.txt`. Seen at the motor: it stopped when the switch was pressed.
+
+**But the motor was not turning properly at 60 rev/min.** It shook instead of rotating, so
+this run does not show a stop from a clean rotation, and the 21.7 turns are what the
+controller counted, not what the shaft did. At 10 rev/min the same motor turned correctly
+earlier the same day. The cause is not known yet (resonance of the unloaded motor, too little
+torque at this current and 12 V, or the step pulses); the speed test T6 has to find where it
+starts. The stop test with a motor is repeated at a speed where the motor turns properly.
 
