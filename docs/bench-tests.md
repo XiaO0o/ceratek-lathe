@@ -22,7 +22,7 @@ T3 are done with **no motor connected**, so nothing can move.
 | T5 Steps per revolution | the real microstep setting | steps-per-mm and steps-per-rev values | | | |
 | T6 Speed envelope | highest reliable speed, temperature rise | speed and acceleration limits of the rotation axis | | | |
 | T7 Homing sequence | search, trigger, pull-off, slow re-approach, failure alarm | homing and alarm handling | | | |
-| T8 Stop and recovery | stop halts motion, locks commands, needs a deliberate restart | the stop state machine (tasks X1-X3) | | | |
+| T8 Stop and recovery | stop halts motion, locks commands, needs a deliberate restart | the stop state machine (tasks X1-X3) | 2026-11-14 | **pass** for the stop input; feed hold and power cut not compared yet | `records/20261114_t8_estop_motor_seated.txt` |
 | T9 One pass, dry | plunge, feed and retract follow each other with no pause in rotation | the pass generator | | | |
 
 Detailed steps for T4 onward are written as each earlier test settles what they depend on.
@@ -303,7 +303,7 @@ They are checked when the machine's own motors are connected.
 (`$J=G91 X30 F60`); the stop switch was pressed after 21.7 turns and held about 6 s.
 The controller behaved exactly as without a motor: `Alarm` and `ALARM:13` at once, no unlock,
 jog or homing accepted while held or after release, `Idle` again only after a soft reset.
-Record: `records/20261114_t8_estop_motor.txt`. Seen at the motor: it stopped when the switch was pressed.
+Record: `records/20261114_t8_estop_motor_LOOSE_WIRE_void.txt` (void, see below). Seen at the motor: it stopped when the switch was pressed.
 
 **But the motor was not turning properly at 60 rev/min.** It shook instead of rotating, so
 this run does not show a stop from a clean rotation, and the 21.7 turns are what the
@@ -322,4 +322,12 @@ with the loose wire is not kept.
   motor leads need latching plugs or crimped terminals, not jumper wires.
 - 60 rev/min is not the limit; T6 continues upward from here.
 - The stop test with the motor turning still has to be repeated with the wires seated.
+
+**Stop input with the motor turning, repeated with the wires seated, 2026-11-14: pass.**
+Motor on `X-Motor` at 60 rev/min, turning smoothly (seen). The stop switch was pressed after
+about 4 turns and held about 7 s. The motor stopped at once (seen). The controller went to
+`Alarm` with `ALARM:13`, accepted no unlock, jog or homing while the switch was held or
+after its release, and returned to `Idle` only after a soft reset.
+Record: `records/20261114_t8_estop_motor_seated.txt`. The earlier run with the loose wire is
+kept only as a void record.
 
