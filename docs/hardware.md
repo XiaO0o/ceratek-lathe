@@ -20,6 +20,7 @@ rail, but our board does not run from USB (section 4).
 | --- | --- | --- |
 | Controller | MKS DLC32 V2.2, ESP32 module, CH340C USB-serial chip | seen (silkscreen) |
 | Firmware as delivered | MKS `V2.2.6(8M.H35.20241121)`, Grbl 1.1h protocol, 3 axes | seen (T2 record) |
+| Firmware now | FluidNC v4.1.1 (esp32-wifi) with `firmware/fluidnc/config.yaml`, flashed 2026-11-14. The screen is not supported by FluidNC and stays dark | seen (probe record of 2026-11-14) |
 | Stepper drivers | 3 plug-in modules, TMC2209-LA, 0.11 ohm sense resistors, blue heatsinks | seen on the X module; Y and Z assumed identical |
 | Screen | MKS TS35-R V2.0 (board marked 002) on the two EXP ribbon cables. Works once each ribbon is on the right socket (section 5) | seen |
 | Fan | on the 2-pin `-12/24V+` header; runs on the 12 V supply | seen |

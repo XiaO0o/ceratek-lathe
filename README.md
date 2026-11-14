@@ -19,7 +19,8 @@ everything needed to set up and test the controller.
 | Serial link, status parsing, simulator | Working, covered by automated tests |
 | `probe` bench tool (T2) | Run on the board |
 | `monitor` bench tool (T3) | Run on the board |
-| Firmware choice, motion, homing, stop handling, operator workflow | Not started |
+| Firmware | FluidNC v4.1.1 flashed on 2026-11-14 with [firmware/fluidnc/config.yaml](firmware/fluidnc/config.yaml); it started without a configuration error. The limit, stop and motor tests have to be repeated under it |
+| Motion, homing, stop handling, operator workflow | Not started |
 
 ## Quick start
 

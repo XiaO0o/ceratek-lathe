@@ -215,3 +215,36 @@ the supply unplugged (which must be followed by re-homing), and the three are co
 motor on each socket in turn: on the rotation socket it must turn continuously through all
 three moves; on the feed and depth sockets it must make the expected moves at the expected time.
 *Pass:* no stop or stutter in rotation between moves; distances and timing match the plan.
+
+---
+
+## Firmware change, 2026-11-14
+
+The firmware as delivered has no stop input and only one soft-limit switch for all axes
+(T2), so the board was moved to FluidNC v4.1.1.
+
+1. The complete 8 MB flash was read out twice at 115200 baud (this USB link loses data at
+   higher rates). The two reads are identical except for 314 bytes inside the `nvs` settings
+   partition, which the firmware rewrites while running. The first read is kept as
+   `backups/mks-dlc32-v2.2_factory_V2.2.6_20261113.bin`. It is not in the repository because
+   it holds the Wi-Fi settings stored on the board. Writing it back to address 0 restores
+   the board as delivered.
+2. FluidNC's own pre-flash check (secure boot not enabled) passed.
+3. The official `fluidnc-v4.1.1-posix.zip` release was written with esptool at the addresses
+   its install script uses: bootloader 0x1000, boot_app0 0xe000, firmware 0x10000,
+   partitions 0x8000, file system 0x3d0000. Every part verified after writing.
+4. `firmware/fluidnc/config.yaml` was uploaded over XMODEM (`$Xmodem/Receive=config.yaml`)
+   and the board restarted (`$Bye`).
+
+**Result:** the startup log (`$SS`) lists the machine name, the I2S pins, the three axes with
+their step and direction outputs, the Y and Z limit inputs and the stop input, with no error
+or warning. The controller starts in `Alarm`, as configured (`must_home`). Record:
+`records/20261114-131230_probe.txt`.
+
+**Still to do under FluidNC:** repeat T3 (Y and Z limit inputs, and the stop input on the `X`
+header) and T4 (motor on each socket). Until then the pin numbers that were taken from the
+V2.1 drawings are confirmed only as far as "FluidNC accepted them".
+
+FluidNC also starts a Wi-Fi access point named `FluidNC` with its default password. It is not
+needed for the bench work; whether to turn it off is open.
+
