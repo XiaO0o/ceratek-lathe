@@ -23,7 +23,11 @@ kinematics:
 
 stepping:
   engine: I2S_STATIC       # step and direction go through the 74HC595 shift register
-  idle_ms: 255             # 255 = never release the motors: the lathe must hold its depth of cut
+  # BENCH: release the motors 250 ms after a move ends. With 255 (never release) the stand-in
+  # motor became too hot to touch within minutes on 2026-11-14, because the driver current has
+  # not been measured or set yet. The lathe needs 255 to hold its depth of cut; go back to it
+  # only after Vref has been set with a multimeter (docs/hardware.md, section 3).
+  idle_ms: 250
   pulse_us: 4
   dir_delay_us: 1
   disable_delay_us: 0

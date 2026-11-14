@@ -248,3 +248,11 @@ V2.1 drawings are confirmed only as far as "FluidNC accepted them".
 FluidNC also starts a Wi-Fi access point named `FluidNC` with its default password. It is not
 needed for the bench work; whether to turn it off is open.
 
+**Overheating, 2026-11-14.** With the first FluidNC configuration the motors stayed energised
+all the time (`idle_ms: 255`). The stand-in motor, connected to `Z-Motor` and standing still,
+became too hot to touch within roughly a quarter of an hour and was unplugged. Under the
+firmware as delivered the motors were released 25 ms after each move, which had hidden how
+high the driver current is. The configuration now releases the motors when idle
+(`idle_ms: 250`) until the driver current has been measured and set. The copy on the board
+still has the old value until the file is uploaded again.
+
