@@ -267,3 +267,28 @@ the controller was already in the start-up alarm; afterwards `$X` unlocked it an
 command was accepted. The stop test proper (T8) has to press the switch while the machine
 is unlocked and moving, and try to unlock while it is held.
 
+**Stop input locks the machine, 2026-11-14: pass (no motor connected).** A 50 mm Y jog was
+started and the stop switch on the `X` header was pressed 18 s in and held for 19 s.
+Record: `records/20261114_t8_estop_no_motor.txt`.
+
+| Step | What the controller did |
+| --- | --- |
+| Switch pressed during the move | stopped within one 0.1 s poll: `Alarm`, `ALARM:13`, "Stopped by estop_pin" |
+| `$X`, a jog and `$H` while the switch was held | none accepted; `$X` answered "Reset to continue" |
+| `$X` and a jog after release, without a reset | none accepted; still `Alarm` |
+| Soft reset (Ctrl-X) after release | back to `Idle`; commands accepted again |
+
+This is the behaviour the design report asks for: motion stops, commands stay inhibited while
+the switch is active, and release alone does not restart the machine.
+
+Two things the control software has to handle:
+
+- In this alarm FluidNC sends neither `ok` nor `error` for a refused command, so the software
+  must not wait for a reply; it has to watch the status report instead.
+- After the reset the controller is `Idle` and keeps its old position, although a hard stop
+  can lose steps. FluidNC does not insist on homing again here, so the software must:
+  after a stop, home before any further move.
+
+Still open for T8: the same test with a motor turning, the comparison with a feed hold, and
+the stopping time.
+
