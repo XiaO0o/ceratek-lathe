@@ -43,8 +43,8 @@ Board seen from above with the motor headers at the top edge and the USB / DC so
                                  IO4
 ```
 
-- The connector positions and names are **seen**. The pin order inside each connector is
-  **V2.1** and still has to be confirmed (T3 for the limit headers, T4 for the motor headers).
+- The connector positions and names are **seen**. The limit header pin order is **seen**
+  (bench test T3). The motor header pin order is **V2.1** and still has to be confirmed (T4).
 - Motor headers: 4 pins, 2.54 mm pitch, order `2B 2A 1A 1B`. The two pins of one motor coil
   are next to each other (`2B 2A` is one coil, `1A 1B` the other).
 - `Y1-Motor` and `Y2-Motor` are wired to the same driver. The lathe uses `Y1-Motor` only.
@@ -181,8 +181,8 @@ onto that circuit.
 Three red "Mech Endstop" style modules: a lever microswitch, an LED with a 1 k resistor (R1),
 a 10 k resistor (R2), a capacitor (C1) and a 4-pin white connector, each with a 3-wire cable.
 
-Traced from photos of our module and from the MakerBot design it copies; bench test T3
-confirms it:
+Traced from photos of our module and from the MakerBot design it copies, and confirmed by
+bench test T3:
 
 | Wire | Module | Switch terminal |
 | --- | --- | --- |
@@ -268,8 +268,8 @@ which is why they live in configuration and not in code.
 | DIP switches, Y and Z | **TBD** - found by measurement in T5 |
 | Vref, X / Y / Z | **TBD** (needs a multimeter) |
 | Firmware as delivered | `V2.2.6(8M.H35.20241121)`, see `records/20261113-161720_probe.txt` |
-| Limit header pin order on V2.2 | **TBD** (pre-check in bench test T3) |
-| Limit switch module: output when pressed, LED when pressed | expected 0 V and LED on (section 6); **TBD** confirm in T3 |
+| Limit header pin order on V2.2 | `5V / GND / S` from the motor-header side, same as V2.1 (T3) |
+| Limit switch module | active (0 V) and LED on while pressed; inputs X, Y, Z each read their own switch (T3) |
 | Screen: why it stayed dark | the two ribbons were swapped; corrected (section 5) |
 | X driver module after it was taken out | put back before power-on, same way round as Y and Z |
 | Does the serial port disappear when the supply is unplugged | **TBD** |

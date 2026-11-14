@@ -17,7 +17,7 @@ T3 are done with **no motor connected**, so nothing can move.
 | T0 Label check | what is actually on the bench | starting values for the configuration | 2026-11-13 | done, three items open | below |
 | T1 Motor coil pairs | how the test motor must be wired | wiring notes in hardware.md | | wire order known, pairs not yet checked | |
 | T2 First power-up and firmware baseline | the serial link works; firmware identity and settings as delivered | serial link, status parsing, the baseline to return to | 2026-11-13 | **pass** | `records/20261113-161720_probe.txt` |
-| T3 Limit inputs | which header is which input, and its polarity | homing and stop configuration | | | |
+| T3 Limit inputs | which header is which input, and its polarity | homing and stop configuration | 2026-11-13 | **pass** | `records/20261113_t3_monitor_xyz.txt` |
 | T4 First motor movement | each driver socket turns the motor both ways | jog commands | | | |
 | T5 Steps per revolution | the real microstep setting | steps-per-mm and steps-per-rev values | | | |
 | T6 Speed envelope | highest reliable speed, temperature rise | speed and acceleration limits of the rotation axis | | | |
@@ -123,8 +123,8 @@ runs through the module's 1 k resistor, so a wrong guess cannot short anything.
 
 | Outer pin of the `X` header | LED while pressed |
 | --- | --- |
-| on the motor-header side | |
-| on the ESP32 side | |
+| on the motor-header side | lit clearly: this is the 5 V pin, as in the V2.1 drawing |
+| on the ESP32 side | not tried; it is the signal pin |
 
 ### The test
 
@@ -140,12 +140,19 @@ runs through the module's 1 k resistor, so a wrong guess cannot short anything.
 
 | Header | Letter that changed | Active at rest? | Active when pressed? | LED when pressed? |
 | --- | --- | --- | --- | --- |
-| `X` | | | | |
-| `Y` | | | | |
-| `Z` | | | | |
+| `X` | X | no | yes | yes |
+| `Y` | Y | no | yes | not noted |
+| `Z` | Z | no | yes | not noted |
 
 **Pass:** every header changes its own letter and no other, each press and release is seen
 once, and the `5V` LED stays lit with all three switches connected.
+
+### Result, 2026-11-13: pass
+
+X alone was pressed ten times, then X, Y and Z three times each with all three connected.
+Every press and release was seen exactly once, each header changed only its own letter, and
+the `5V` LED stayed lit. The limit headers are `5V / GND / S` from the motor-header side, and
+the polarity as delivered (`$5=1`) suits these switches: nothing has to be changed.
 
 **How to read it:** a letter that is listed at rest and disappears on pressing means the firmware's
 idea of "active" is the opposite of this switch. That is a setting, not a fault; write it down

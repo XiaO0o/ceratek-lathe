@@ -1,0 +1,33 @@
+# Limit inputs (bench test T3): X, Y and Z switches pressed in turn, three times each
+# captured: 2026-11-13, lathe 0.1.0 monitor --duration 60 --interval 0.1
+
+Connecting to /dev/cu.usbserial-130 (WCH CH340/CH9102, USB 1a86:7523); waiting for the controller to boot ...
+Watching the inputs. Press and release each switch in turn; Ctrl-C to stop.
+A letter is listed while the firmware considers that input active (+ went on, - went off).
+   0.01s  state=Idle   active inputs: P
+   2.56s  state=Idle   active inputs: PX       +X
+   4.02s  state=Idle   active inputs: P        -X
+  11.25s  state=Idle   active inputs: PY       +Y
+  12.59s  state=Idle   active inputs: P        -Y
+  18.03s  state=Idle   active inputs: PZ       +Z
+  19.25s  state=Idle   active inputs: P        -Z
+  22.47s  state=Idle   active inputs: PX       +X
+  24.03s  state=Idle   active inputs: P        -X
+  27.36s  state=Idle   active inputs: PY       +Y
+  28.92s  state=Idle   active inputs: P        -Y
+  32.16s  state=Idle   active inputs: PZ       +Z
+  33.38s  state=Idle   active inputs: P        -Z
+  36.48s  state=Idle   active inputs: PX       +X
+  37.82s  state=Idle   active inputs: P        -X
+  40.93s  state=Idle   active inputs: PY       +Y
+  42.16s  state=Idle   active inputs: P        -Y
+  45.04s  state=Idle   active inputs: PZ       +Z
+  46.16s  state=Idle   active inputs: P        -Z
+
+540 status polls.
+  active at the start : P
+  switched on         : X (3x), Y (3x), Z (3x)
+  P = probe input
+  X = X limit input
+  Y = Y limit input
+  Z = Z limit input
