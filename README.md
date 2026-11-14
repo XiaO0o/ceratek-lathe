@@ -11,18 +11,35 @@ everything needed to set up and test the controller.
 
 ## Status
 
+As of 2026-11-14. The machine frame was not available yet, so everything below was done on
+the bench with the controller, one stand-in motor and three limit switches.
+
 | Area | State |
 | --- | --- |
-| Controller pin map and wiring rules | [docs/hardware.md](docs/hardware.md). Our board is a V2.2 and the published drawings stop at V2.1, so each fact is marked as seen on the board or taken from the V2.1 drawings |
-| Bench test plan, T0 to T9 | [docs/bench-tests.md](docs/bench-tests.md). T0 to T4 done: the link, the limit inputs and all three motor drivers work. T5 and T6 are next |
-| Firmware as delivered | MKS `V2.2.6`, captured in `records/`. It is set up as a laser engraver and has no stop input |
-| Serial link, status parsing, simulator | Working, covered by automated tests |
-| `probe` bench tool (T2) | Run on the board |
-| `monitor` bench tool (T3) | Run on the board |
-| Firmware | FluidNC v4.1.1 flashed on 2026-11-14 with [firmware/fluidnc/config.yaml](firmware/fluidnc/config.yaml); it started without a configuration error. The limit, stop and motor tests have to be repeated under it |
-| Pass planning (depths, moves of a pass, correction from the measured diameter) | Written and tested without hardware; no move has been run from it yet |
-| Machine driver: homing, sending a pass, stop and restart rules | Written and tested against the simulator, which copies the stop behaviour seen on the bench; not yet run on the board |
-| Operator workflow: `python -m lathe run` guides homing, the four entries, touching off, each pass and each measurement | Written and tested against the simulator; not yet run on the board. Try it with `python -m lathe run --sim` |
+| Controller | MKS DLC32 **V2.2**. Only V2.1 drawings are published, so [docs/hardware.md](docs/hardware.md) marks each fact as seen on our board or taken from the V2.1 drawings |
+| Firmware | FluidNC v4.1.1 with [firmware/fluidnc/config.yaml](firmware/fluidnc/config.yaml). The firmware as delivered had no stop input; it is backed up and can be put back |
+| Bench tests | [docs/bench-tests.md](docs/bench-tests.md), with the captures in `records/`. Done: serial link, limit inputs, motor drivers, stop input, homing sequence, one dry pass |
+| Pass planning | Written and tested; one planned pass has run on the board (dry, rotation motor only) |
+| Machine driver: homing, running a pass, stop and restart rules | Written and tested; has run on the board for that dry pass and for homing failures |
+| Operator sequence, `python -m lathe run` | Written and tested against the simulator; not yet run on the board |
+
+### Still to do, on the machine
+
+These cannot be done on the bench:
+
+- Move Y and Z with their own motors; confirm directions and steps per millimetre. Under FluidNC
+  only the rotation output has turned a motor.
+- Home through the software with the carriages pressing the switches. By hand it was too
+  dependent on timing to complete.
+- Measure and set the driver current (needs a multimeter), then hold the motors when idle
+  (`idle_ms: 255`). They are released for now because the stand-in motor overheated when held.
+- Find the highest reliable rotation speed. 10 to 60 rev/min ran cleanly; nothing faster was tried.
+- Replace the plain jumper plugs on the motor and limit switch leads with latching plugs or
+  crimped terminals. All three faults on the bench were plugs that had worked loose.
+- Set the values in [config/lathe.toml](config/lathe.toml) and the speeds and travels in the
+  FluidNC configuration from cutting trials and the machine's real dimensions. Every one of
+  them is a bench starting point.
+- Run `python -m lathe run` on the machine with an operator.
 
 ## Quick start
 
@@ -42,9 +59,31 @@ With the controller powered from its 12 V supply (it does not run from USB) and 
 python -m lathe ports              # which serial port is the controller?
 python -m lathe probe              # T2: read firmware version and all settings, save a record
 python -m lathe monitor            # T3: watch the limit / probe inputs while pressing switches
+python -m lathe run                # refine one tube: the operator's guided sequence
 ```
 
-These tools only ask the controller questions. They do not move a motor or change a setting.
+`ports`, `probe` and `monitor` only ask the controller questions. `run` moves the machine, and
+asks before every homing cycle and every pass.
+
+## The stop switch
+
+- Pressing it stops all motion at once. Nothing can be sent while it is pressed.
+- Releasing it does not bring the machine back. The software has to recover the controller
+  and home again before it will cut, because a hard stop can lose steps.
+- Unplugging the 12 V supply turns the controller off; the serial port disappears from the
+  computer. After power returns the machine has to be homed.
+
+`run` leads the operator through this. The behaviour was recorded on the bench; see
+"Stop input" in [docs/bench-tests.md](docs/bench-tests.md).
+
+## Firmware
+
+The controller runs FluidNC. To change its configuration, edit
+[firmware/fluidnc/config.yaml](firmware/fluidnc/config.yaml), upload it to the controller as
+`config.yaml` (FluidNC's `$Xmodem/Receive=config.yaml`, or its web page) and restart it. The
+steps used on 2026-11-14, including how the firmware as delivered was backed up and how to
+write it back, are under "Firmware change" in [docs/bench-tests.md](docs/bench-tests.md).
+The backup file itself is kept outside the repository because it holds Wi-Fi settings.
 
 ## Layout
 
