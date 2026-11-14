@@ -37,9 +37,10 @@ class CutSettings:
     y_toward_tube: int  # +1 or -1: the Y direction that moves the tool toward the tube
     z_cut_direction: int  # +1 or -1: the Z direction of the cutting stroke
     min_wall_mm: float  # refuse a target that would leave a thinner wall than this
+    jog_feed_mm_per_min: float  # speed of the set-up moves the operator asks for
 
     def __post_init__(self) -> None:
-        for name in ("rpm", "feed_per_rev_mm", "max_depth_mm", "first_depth_mm", "clearance_mm", "plunge_revs"):
+        for name in ("rpm", "feed_per_rev_mm", "max_depth_mm", "first_depth_mm", "clearance_mm", "plunge_revs", "jog_feed_mm_per_min"):
             if getattr(self, name) <= 0:
                 raise ValueError(f"{name} must be greater than zero")
         if self.spinup_revs < 0 or self.min_wall_mm < 0:

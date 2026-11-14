@@ -9,7 +9,7 @@ from lathe.settings import load_cut_settings
 
 SETTINGS = passes.CutSettings(
     rpm=60, feed_per_rev_mm=0.1, max_depth_mm=0.10, first_depth_mm=0.05, clearance_mm=1.0,
-    plunge_revs=5, spinup_revs=2, y_toward_tube=1, z_cut_direction=1, min_wall_mm=0.4,
+    plunge_revs=5, spinup_revs=2, y_toward_tube=1, z_cut_direction=1, min_wall_mm=0.4, jog_feed_mm_per_min=120,
 )  # fmt: skip
 
 

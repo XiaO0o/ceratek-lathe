@@ -22,7 +22,7 @@ everything needed to set up and test the controller.
 | Firmware | FluidNC v4.1.1 flashed on 2026-11-14 with [firmware/fluidnc/config.yaml](firmware/fluidnc/config.yaml); it started without a configuration error. The limit, stop and motor tests have to be repeated under it |
 | Pass planning (depths, moves of a pass, correction from the measured diameter) | Written and tested without hardware; no move has been run from it yet |
 | Machine driver: homing, sending a pass, stop and restart rules | Written and tested against the simulator, which copies the stop behaviour seen on the bench; not yet run on the board |
-| Operator workflow (the guided sequence with the four entries) | Not started |
+| Operator workflow: `python -m lathe run` guides homing, the four entries, touching off, each pass and each measurement | Written and tested against the simulator; not yet run on the board. Try it with `python -m lathe run --sim` |
 
 ## Quick start
 
@@ -33,7 +33,7 @@ python3 -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
 python -m pip install -e ".[dev]"
 python -m pytest -q                # needs no hardware
-python -m lathe probe --sim        # try a tool against the built-in simulator
+python -m lathe run --sim          # walk through a whole job on the built-in simulator
 ```
 
 With the controller powered from its 12 V supply (it does not run from USB) and connected by USB:
@@ -56,6 +56,7 @@ lathe/            the Python package
   sim.py          an in-memory stand-in for the controller, for tests and dry runs
   records.py      saving captures as text, with network details masked
   machine.py      runs the lathe: homing, sending a pass, stop and restart rules
+  session.py      the operator's guided sequence for one tube
   passes.py       from the operator's diameters to the moves of one cutting pass
   settings.py     reads the cutting parameters from config/lathe.toml
   cli.py          the command line (python -m lathe ...)

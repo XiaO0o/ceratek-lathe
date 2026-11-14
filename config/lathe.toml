@@ -17,3 +17,4 @@ min_wall_mm = 0.40       # refuse a target that would leave a thinner wall
 [axes]
 y_toward_tube = 1        # +1 or -1: the Y direction that brings the tool toward the tube
 z_cut_direction = 1      # +1 or -1: the Z direction of the cutting stroke
+jog_feed_mm_per_min = 120.0   # speed of the set-up moves the operator asks for when touching off

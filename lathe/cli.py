@@ -1,10 +1,11 @@
 """Command line for the bench tools: ``python -m lathe <command>``.
 
+    run       refine one tube: the operator's guided sequence
     ports     list the serial ports that could be the controller
     probe     bench test T2: read the firmware identity and every setting, save a record
     monitor   bench test T3: watch the controller's inputs while switches are pressed
 
-Nothing here moves a motor or changes a setting.
+Only ``run`` moves the machine. The other commands only ask the controller questions.
 """
 
 from __future__ import annotations
@@ -19,6 +20,9 @@ from pathlib import Path
 
 from . import __version__, grbl, ports, records
 from .link import BAUD, GrblLink, GrblTimeout
+from .machine import Machine
+from .session import Console, Quit, Session
+from .settings import DEFAULT_PATH, load_cut_settings
 from .sim import SimulatedGrbl
 
 # Read-only queries. A firmware that lacks one answers "error:3", which is recorded as such.
@@ -220,6 +224,34 @@ def _monitor(args) -> int:
     return 0
 
 
+# -- the operator's sequence ------------------------------------------------
+
+
+def _run(args) -> int:
+    settings = load_cut_settings(Path(args.config))
+    if args.sim:
+        link = GrblLink(SimulatedGrbl(move_polls=3, lock_on_reset=True))
+        link.drain(quiet=0.02, max_wait=0.5, first_byte=0.05)
+        machine = Machine(link, poll_s=0.05, reset_wait_s=0.1)
+        print("SIMULATION - no machine is connected. Nothing will move.")
+    else:
+        link, label = _connect(args)
+        print(f"Connected to {label}; waiting for the controller ...", flush=True)
+        if wait_until_ready(link, Timing()) is None:
+            print("The port opened but the controller did not answer.", file=sys.stderr)
+            link.close()
+            return 3
+        machine = Machine(link)
+    print("Type q at any question to end the session.\n")
+    try:
+        Session(machine, settings, Console()).run()
+    except (Quit, KeyboardInterrupt, EOFError):
+        print("\nSession ended by the operator.")
+    finally:
+        link.close()
+    return 0
+
+
 # -- shared ---------------------------------------------------------------
 
 
@@ -261,6 +293,10 @@ def main(argv: list[str] | None = None) -> int:
     connection.add_argument("--port", help="serial device, e.g. /dev/cu.usbserial-110 or COM5 (default: auto-detect)")
     connection.add_argument("--baud", type=int, default=BAUD, help=f"baud rate (default {BAUD})")
     connection.add_argument("--sim", action="store_true", help="talk to the built-in simulator instead of a board")
+
+    run = commands.add_parser("run", parents=[connection], help="refine one tube: the operator's guided sequence")
+    run.add_argument("--config", default=str(DEFAULT_PATH), help=f"cutting parameters (default {DEFAULT_PATH})")
+    run.set_defaults(run=_run)
 
     probe = commands.add_parser("probe", parents=[connection], help="T2: read firmware identity and settings")
     probe.add_argument("--out", default="records", help="folder for the record file (default: records)")
