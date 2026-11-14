@@ -1,0 +1,20 @@
+# Cutting parameters for the Ceratek tube lathe, read by lathe/settings.py.
+#
+# Every value here is a BENCH starting point chosen for dry runs with the stand-in motor.
+# None of them has been tried on a tube. They are set from cutting trials on the machine,
+# and changed here, not in the code.
+
+[cut]
+rpm = 60.0               # tube speed while cutting; 10 to 60 rev/min ran cleanly on the bench
+feed_per_rev_mm = 0.10   # tool travel along the tube per turn
+max_depth_mm = 0.10      # most that one pass may take off the radius
+first_depth_mm = 0.05    # depth of the first pass, the one the calibration rests on
+clearance_mm = 1.0       # how far the tool backs off the surface after touching it
+plunge_revs = 5.0        # turns of the tube while the tool moves in to depth, and out again
+spinup_revs = 2.0        # turns before the tool starts to move in
+min_wall_mm = 0.40       # refuse a target that would leave a thinner wall
+
+[axes]
+y_toward_tube = 1        # +1 or -1: the Y direction that brings the tool toward the tube
+z_cut_direction = 1      # +1 or -1: the Z direction of the cutting stroke
+jog_feed_mm_per_min = 120.0   # speed of the set-up moves the operator asks for when touching off

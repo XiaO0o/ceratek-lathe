@@ -1,0 +1,32 @@
+# Inputs under FluidNC v4.1.1 (repeat of bench test T3): Y, Z and the stop switch on the X header, three presses each
+# captured: 2026-11-14, lathe 0.1.0 monitor --duration 90 --interval 0.1, no motor connected
+
+Connecting to /dev/cu.usbserial-130 (WCH CH340/CH9102, USB 1a86:7523); waiting for the controller to boot ...
+Watching the inputs. Press and release each switch in turn; Ctrl-C to stop.
+A letter is listed while the firmware considers that input active (+ went on, - went off).
+   0.01s  state=Alarm  active inputs: none
+  20.35s  state=Alarm  active inputs: Y        +Y
+  21.92s  state=Alarm  active inputs: none     -Y
+  26.28s  state=Alarm  active inputs: Z        +Z
+  28.20s  state=Alarm  active inputs: none     -Z
+  31.44s  state=Alarm  active inputs: E        +E
+  32.90s  state=Alarm  active inputs: none     -E
+  39.38s  state=Alarm  active inputs: Y        +Y
+  40.60s  state=Alarm  active inputs: none     -Y
+  43.63s  state=Alarm  active inputs: Z        +Z
+  44.99s  state=Alarm  active inputs: none     -Z
+  48.37s  state=Alarm  active inputs: E        +E
+  50.04s  state=Alarm  active inputs: none     -E
+  55.63s  state=Alarm  active inputs: Y        +Y
+  56.86s  state=Alarm  active inputs: none     -Y
+  60.56s  state=Alarm  active inputs: Z        +Z
+  61.90s  state=Alarm  active inputs: none     -Z
+  64.82s  state=Alarm  active inputs: E        +E
+  66.28s  state=Alarm  active inputs: none     -E
+
+805 status polls.
+  active at the start : none
+  switched on         : E (3x), Y (3x), Z (3x)
+  E = e-stop input (FluidNC)
+  Y = Y limit input
+  Z = Z limit input

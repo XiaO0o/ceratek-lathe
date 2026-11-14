@@ -1,0 +1,19 @@
+# Y homing cycle under FluidNC v4.1.1 (bench test T7), no motor on Y; the Y switch was pressed by hand
+# captured: 2026-11-14. Command: $HY. A third press after homing had finished raised the hard-limit alarm.
+
+  2.55s before: <Idle|MPos:53.222,31.795,0.000|FS:0,0>
+  2.55s sent $HY
+  2.61s STATE <Home|MPos:53.222,31.725,0.000|FS:300,0>
+  3.60s STATE <Home|MPos:53.222,27.013,0.000|FS:0,0|Pn:Y>
+  5.85s STATE <Home|MPos:53.222,29.013,0.000|FS:0,0>
+  6.96s STATE <Home|MPos:53.222,28.155,0.000|FS:0,0|Pn:Y>
+  9.26s STATE <Home|MPos:53.222,30.155,0.000|FS:0,0>
+  9.51s STATE <Idle|MPos:53.222,0.000,0.000|FS:0,0>
+  9.51s MSG   [MSG:Homed:Y]
+  9.51s MSG   ok
+ 11.10s STATE <Alarm|MPos:53.222,0.000,0.000|FS:0,0|Pn:Y|Ov:100,100,100>
+ 11.10s MSG   [MSG:INFO: ALARM: Hard Limit]
+ 11.10s MSG   ALARM:1
+ 11.60s MSG   [MSG:ERR: Reset to continue]
+ 12.98s STATE <Alarm|MPos:53.222,0.000,0.000|FS:0,0>
+ 35.02s end: <Alarm|MPos:53.222,0.000,0.000|FS:0,0|WCO:0.000,0.000,0.000>

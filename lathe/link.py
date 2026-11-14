@@ -77,6 +77,17 @@ class GrblLink:
         self.port.write(byte)
         self.transcript.append((">", _printable(byte)))
 
+    def send(self, text: str) -> None:
+        """Send one line without waiting for its answer.
+
+        For commands that answer only when they finish (homing) or may not answer at all
+        (anything sent while the stop input has the controller locked). The caller watches
+        the status report instead; whatever does come back ends up in ``unsolicited``.
+        """
+        self._set_aside_unsolicited()
+        self.port.write(text.encode("ascii") + b"\n")
+        self.transcript.append((">", text))
+
     def command(self, text: str, timeout: float = 3.0) -> Reply:
         """Send one line and collect the reply up to its ``ok`` or ``error:``."""
         self._set_aside_unsolicited()

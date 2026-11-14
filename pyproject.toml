@@ -7,7 +7,7 @@ name = "ceratek-lathe"
 dynamic = ["version"]
 description = "Host-side control software for the Ceratek ceramic tube refinement lathe"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = ["pyserial>=3.5"]
 
 [project.optional-dependencies]

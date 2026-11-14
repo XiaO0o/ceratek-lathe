@@ -53,6 +53,24 @@ def test_probe_reports_a_board_that_never_answers(tmp_path):
     assert any(line.startswith("Grbl ") for line in result.sections[0][1])  # the boot text is still kept
 
 
+def test_probe_works_when_opening_the_port_does_not_restart_the_board(tmp_path, capsys, monkeypatch):
+    # Seen on the real board from macOS: no boot text at all, the controller just answers.
+    def already_running():
+        board = SimulatedGrbl()
+        board.reset_input_buffer()
+        return board
+
+    monkeypatch.setattr(cli, "SimulatedGrbl", already_running)
+
+    assert cli.main(["probe", "--sim", "--out", str(tmp_path)]) == 0
+
+    text = next(tmp_path.glob("*.txt")).read_text(encoding="utf-8")
+    assert f"== {cli.BOOT_SECTION} ==\n{cli.NO_RESTART}\n" in text
+    out = capsys.readouterr().out
+    assert "banner   : none (the controller did not restart" in out
+    assert "identity : [VER:1.3a.SIM:] [OPT:PHS]" in out
+
+
 def test_extra_probe_commands_are_sent_after_the_standard_ones():
     board = SimulatedGrbl()
 
