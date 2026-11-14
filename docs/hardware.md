@@ -235,6 +235,10 @@ To confirm the coil pairs before powering the motor (bench test T1):
    clearly harder to turn and feel notchy.
 3. Bridge red and green instead: nothing should change.
 
+A jumper wire that is not pushed fully home leaves one coil undriven: the motor shakes and
+loses steps instead of turning, which is easy to mistake for a speed limit (seen at
+60 rev/min on 2026-11-14). The machine's motors need latching plugs or crimped terminals.
+
 A motor wired with the coils mixed up does not turn, but it is not damaged. What damages a
 driver is connecting or disconnecting the motor while the supply is on.
 

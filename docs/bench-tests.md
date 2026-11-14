@@ -312,3 +312,14 @@ earlier the same day. The cause is not known yet (resonance of the unloaded moto
 torque at this current and 12 V, or the step pulses); the speed test T6 has to find where it
 starts. The stop test with a motor is repeated at a speed where the motor turns properly.
 
+**Cause of the shaking, and first speed steps, 2026-11-14.** The shaking at 60 rev/min was a
+motor jumper wire that was not seated: with one wire loose only one coil is driven. After the
+wires were pushed home, 10, 20, 30, 45 and 60 rev/min for five seconds each all turned
+normally (seen). Record: `records/20261114_t6_speed_steps_10-60.txt`. The run made earlier
+with the loose wire is not kept.
+
+- Loose jumper wires on the motor header look exactly like a speed limit. On the machine the
+  motor leads need latching plugs or crimped terminals, not jumper wires.
+- 60 rev/min is not the limit; T6 continues upward from here.
+- The stop test with the motor turning still has to be repeated with the wires seated.
+

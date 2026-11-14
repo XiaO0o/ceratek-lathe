@@ -1,0 +1,15 @@
+# Speed steps under FluidNC v4.1.1, motor on X-Motor, 12 V supply (start of bench test T6)
+# captured: 2026-11-14, after the motor jumper wires were re-seated. Seen at the motor: all five steps turned normally.
+
+   2.5s start: <Idle|MPos:35.470,31.795,0.000|FS:0,0>
+   2.5s step 1: 10 rev/min for 0.833 turns -> ok
+   7.7s         done in 5.1s, peak reported rate 10, state Idle
+  10.7s step 2: 20 rev/min for 1.667 turns -> ok
+  15.8s         done in 5.1s, peak reported rate 20, state Idle
+  18.8s step 3: 30 rev/min for 2.5 turns -> ok
+  24.1s         done in 5.3s, peak reported rate 30, state Idle
+  27.1s step 4: 45 rev/min for 3.75 turns -> ok
+  32.5s         done in 5.4s, peak reported rate 45, state Idle
+  35.5s step 5: 60 rev/min for 5 turns -> ok
+  41.1s         done in 5.6s, peak reported rate 60, state Idle
+  44.1s unsolicited: []
