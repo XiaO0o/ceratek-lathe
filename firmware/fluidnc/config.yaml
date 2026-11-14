@@ -16,7 +16,7 @@
 
 board: MKS DLC32 V2.2
 name: Ceratek tube lathe (bench)
-meta: 2026-11-14, bench configuration, not yet run
+meta: 2026-11-14, bench configuration
 
 kinematics:
   Cartesian:
@@ -42,7 +42,10 @@ axes:
 
   x:                                     # tube rotation
     steps_per_mm: 3200.000               # 200 steps x 16 microsteps = 1 revolution per unit (T4)
-    max_rate_mm_per_min: 120.000         # BENCH: 120 rev/min until T6 has measured the real limit
+    # T6 on the bench (12 V, stand-in motor, no load, 10 rev/s^2): smooth up to 200 rev/min,
+    # lost steps from 300. Limit set to 150 for margin; measure again on the machine with the
+    # real motor and the tube holder, and again if the supply changes to 24 V.
+    max_rate_mm_per_min: 150.000
     acceleration_mm_per_sec2: 2.000      # BENCH: 2 rev/s^2
     max_travel_mm: 1000000.000           # unused: this axis turns without end
     soft_limits: false

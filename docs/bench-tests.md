@@ -20,7 +20,7 @@ T3 are done with **no motor connected**, so nothing can move.
 | T3 Limit inputs | which header is which input, and its polarity | homing and stop configuration | 2026-11-13 | **pass** | `records/20261113_t3_monitor_xyz.txt` |
 | T4 First motor movement | each driver socket turns the motor both ways | jog commands | 2026-11-13 | **pass** | below |
 | T5 Steps per revolution | the real microstep setting | steps-per-mm and steps-per-rev values | | | |
-| T6 Speed envelope | highest reliable speed, temperature rise | speed and acceleration limits of the rotation axis | | | |
+| T6 Speed envelope | highest reliable speed, temperature rise | speed and acceleration limits of the rotation axis | 2026-11-14 | smooth to 200 rev/min, lost steps from 300 (12 V, no load); long run not done | `records/20261114_t6_speed_steps_60-600.txt` |
 | T7 Homing sequence | search, trigger, pull-off, slow re-approach, failure alarm | homing and alarm handling | 2026-11-14 | **pass** for Y by hand, no motor; failure alarm and Z not done | `records/20261114_t7_home_y.txt` |
 | T8 Stop and recovery | stop halts motion, locks commands, needs a deliberate restart | the stop state machine (tasks X1-X3) | 2026-11-14 | **pass** for the stop input; feed hold and power cut not compared yet | `records/20261114_t8_estop_motor_seated.txt` |
 | T9 One pass, dry | plunge, feed and retract follow each other with no pause in rotation | the pass generator | 2026-11-14 | **pass** on the controller side with the rotation motor; Y and Z had no motors | `records/20261114_t9_dry_pass.txt` |
@@ -390,4 +390,23 @@ only, after a restart had set all positions to zero. Record: `records/20261114_t
 - Seen at the motor: it turned smoothly for the whole 113 s, with no pause between the
   spin-up, plunge, feed and retract moves.
 - Not shown: that Y and Z really move, since they had no motors.
+
+**Rotation speed limit (T6), 2026-11-14.** Motor on `X-Motor`, 12 V supply, nothing on the
+shaft. Each step ran for about five seconds. Record: `records/20261114_t6_speed_steps_60-600.txt`.
+
+| rev/min | 60 | 75 | 90 | 105 | 120 | 150 | 200 | 300 | 400 | 500 | 600 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Seen at the motor | normal | normal | normal | normal | normal | normal | normal | not normal | not normal | not normal | not normal |
+
+- From 150 rev/min up, a temporary configuration (not committed) raised the X limit to 600
+  rev/min and the acceleration to 10 rev/s^2; the committed configuration was uploaded again
+  afterwards.
+- The controller reached every commanded speed and raised no alarm, also where the motor
+  lost steps: a stepper that stalls is not noticed by the controller. The limit has to come
+  from watching the motor.
+- The X limit in `firmware/fluidnc/config.yaml` is now 150 rev/min, 75 % of the last speed
+  that ran smoothly. Cutting is planned at 60 rev/min (`config/lathe.toml`).
+- Not done: the ten-minute run with a temperature check, a finer step between 200 and 300,
+  and the effect of the acceleration. All of it changes with the real motor, the tube holder
+  on the shaft, and a 24 V supply, so T6 is repeated on the machine.
 
