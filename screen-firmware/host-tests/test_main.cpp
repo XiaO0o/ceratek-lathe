@@ -411,9 +411,8 @@ public:
         }
         return false;
     }
-    bool        rotate = true;  // the third axis switch on the screen
+    bool        rotate = true;  // the screen always turns the tube in the cut; a test may not
     bool        rotation_on() override { return rotate; }
-    std::string ask(const std::string& prompt) override { return next(prompt); }
     double      ask_number(const std::string& prompt) override { return std::stod(next(prompt)); }
     bool        confirm(const std::string& prompt) override { return next(prompt) == "y"; }
     // "<prev>" stands for the keypad's Prev button.
@@ -428,16 +427,23 @@ public:
     }
     std::vector<double> initials;
     // OK / Return: choose() takes "ok" / "return" from the answers; while offered, poll_choice()
-    // takes the next of `choices` at each look ("wait": nothing pressed yet).
-    Choice choose(const std::string& prompt) override { return next(prompt) == "ok" ? Choice::Ok : Choice::Return; }
-    Choice choose_or_settings(const std::string& prompt) override {
+    // takes the next of `choices` at each look ("wait": nothing pressed yet). What each step's
+    // two buttons say is kept in `buttons` as "ok | back".
+    Choice choose(const std::string& prompt, const Labels& labels) override {
+        buttons.push_back(labels.ok + " | " + labels.back);
+        return next(prompt) == "ok" ? Choice::Ok : Choice::Return;
+    }
+    Choice choose_or_settings(const std::string& prompt, const Labels& labels) override {
+        buttons.push_back(labels.ok + " | " + labels.back);
         std::string a = next(prompt);
         return a == "ok" ? Choice::Ok : a == "settings" ? Choice::Settings : Choice::Return;
     }
-    void   offer(const std::string& prompt) override {
+    void   offer(const std::string& prompt, const Labels& labels) override {
+        buttons.push_back(labels.ok + " | " + labels.back);
         asked.push_back(prompt);
         offered++;
     }
+    std::vector<std::string> buttons;
     Choice poll_choice() override {
         if (choices.empty()) {
             return Choice::None;
@@ -543,6 +549,14 @@ TEST(test_each_round_steps_further_until_ok_then_the_length_then_the_cut_then_ba
     CHECK(r.ui.heard("Finished: depth 3.000 mm (3 rounds), length 30.0 mm."));
 }
 
+TEST(test_each_step_names_its_buttons_for_what_they_do) {
+    // 2026-11-27: "Deeper" rather than "Return" for one step further, and so on
+    SessionRig r({ "y", "1", "return", "ok", "60", "60", "ok" }, { "wait", "ok" });
+    r.session.run();
+    std::vector<std::string> want = { "Depth OK | Deeper", "Depth OK | Deeper", "Stop here | Measure again", "Start cut | Change" };
+    CHECK(r.ui.buttons == want);
+}
+
 TEST(test_return_during_the_length_goes_back_to_its_start_and_measures_again) {
     SessionRig r({ "y", "1", "ok", "60", "60", "ok" }, { "wait", "return", "wait", "ok" });
     CutResult  res = r.session.run();
@@ -585,7 +599,7 @@ TEST(test_the_machine_waits_for_the_cutting_values_before_cutting) {
     CHECK(contains(r.lines_with("G1 X").at(0), "X30.000 Z10.000"));
 }
 
-TEST(test_x_on_turns_the_tube_in_jogs_short_enough_for_fluidnc_and_is_refused_in_alarm) {
+TEST(test_the_x_test_run_is_one_jog_short_enough_for_fluidnc_and_is_refused_in_alarm) {
     Rig r;
     r.lathe.spin(30);
     // At most 1000 turns: one jog of 100000 turns crawled and could not be stopped (2026-11-27)
@@ -598,74 +612,6 @@ TEST(test_x_on_turns_the_tube_in_jogs_short_enough_for_fluidnc_and_is_refused_in
 
     Rig locked(true);  // start-up alarm: the tube may not turn before homing
     CHECK(contains(expect_throw<MachineError>([&] { locked.lathe.spin(30); }), "alarm"));
-}
-
-// Jogs that run until the test moves X itself or ends them, as X: ON on the controller.
-static void hold_jogs(Rig& r, std::vector<std::string>& jogs) {
-    r.board.intercept = [&r, &jogs](const std::string& line) {
-        if (line.rfind("$J=", 0) != 0) {
-            return false;
-        }
-        jogs.push_back(line);
-        r.board.state = "Jog";
-        r.board.say("ok");
-        return true;
-    };
-}
-
-TEST(test_x_on_sends_the_next_jog_once_less_than_half_is_left_and_notices_a_stop) {
-    Rig                      r;
-    std::vector<std::string> jogs;
-    hold_jogs(r, jogs);
-    r.lathe.spin(200);
-    CHECK_EQ(jogs.size(), size_t(1));
-    r.board.pos[0] = 400;  // 600 of 1000 turns left: enough
-    CHECK(r.lathe.keep_spinning());
-    CHECK_EQ(jogs.size(), size_t(1));
-    r.board.pos[0] = 600;  // 400 left: the next jog follows on
-    CHECK(r.lathe.keep_spinning());
-    CHECK_EQ(jogs.size(), size_t(2));
-    CHECK_EQ(jogs.back(), std::string("$J=G91 G21 X1000.0000 F200"));
-    r.board.pos[0] = 1300;  // 700 of 2000 left
-    CHECK(r.lathe.keep_spinning());
-    CHECK_EQ(jogs.size(), size_t(2));
-    r.board.state = "Idle";  // a feed hold or a jog cancel ended it
-    CHECK(!r.lathe.keep_spinning());
-    CHECK_EQ(jogs.size(), size_t(2));
-
-    // backward, and an alarm (a switch) ends it as well
-    Rig                      b;
-    std::vector<std::string> back;
-    hold_jogs(b, back);
-    b.lathe.spin(60, -1);
-    b.board.pos[0] = -700;
-    CHECK(b.lathe.keep_spinning());
-    CHECK_EQ(back.size(), size_t(2));
-    CHECK_EQ(back.back(), std::string("$J=G91 G21 X-1000.0000 F60"));
-    b.board.alarm(1);
-    CHECK(!b.lathe.keep_spinning());
-}
-
-TEST(test_a_jog_that_a_cancel_does_not_end_is_stopped_by_a_reset) {
-    Rig r;
-    r.lathe.home();
-    CHECK(!r.lathe.needs_homing);
-    std::vector<std::string> jogs;
-    hold_jogs(r, jogs);
-    int resets_before = -1;
-    r.lathe.spin(200);
-    CHECK(r.lathe.stop_jog(0.05, [&] { resets_before = r.board.resets; }));  // the cancel ends it
-    CHECK_EQ(resets_before, -1);
-    CHECK_EQ(r.board.resets, 0);
-    CHECK(!r.lathe.needs_homing);
-
-    r.lathe.spin(200);
-    r.board.jog_cancel_ignored = true;  // as the 100000-turn jog on 2026-11-27
-    CHECK(!r.lathe.stop_jog(0.05, [&] { resets_before = r.board.resets; }));
-    CHECK_EQ(resets_before, 0);  // told before the reset
-    CHECK_EQ(r.board.resets, 1);
-    CHECK(r.lathe.needs_homing);  // the position is lost
-    CHECK(!is_busy_state(r.lathe.status().state));
 }
 
 static double gword(const std::string& line, char letter) {
@@ -959,6 +905,18 @@ TEST(test_locating_homes_measures_c_to_a_and_goes_back_to_the_zero_point) {
     CHECK_NEAR(r.board.pos[2], 0.0, 1e-9);
     CHECK(!r.machine.needs_homing);
     CHECK(r.ui.heard("Switch A is 180.0 mm from switch C."));
+}
+
+TEST(test_locating_after_a_stop_recovers_the_controller_first) {
+    // The stop input leaves FluidNC refusing homing until a reset; Locate used to need the
+    // Reset button first (2026-11-27).
+    SessionRig r({});
+    r.board.press('E');
+    r.board.release('E');
+    double length = locate(r.machine, SETTINGS, r.ui);
+    CHECK_NEAR(length, 180.0, 1e-9);
+    CHECK_EQ(r.board.homings.size(), size_t(1));
+    CHECK(!r.machine.needs_homing);
 }
 
 TEST(test_a_switch_on_the_way_back_from_locating_is_a_warning_and_the_length_is_kept) {

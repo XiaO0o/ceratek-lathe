@@ -12,7 +12,6 @@
 // answers neither ok nor error, so every wait also watches the status report.
 #pragma once
 
-#include <functional>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -50,17 +49,9 @@ namespace lathe {
         // early with jog_cancel(), which keeps the position.
         void jog_start(char axis, double target, double feed);
         void jog_cancel(double timeout_s = 10.0);
-        // The tube (X) turning on its own (X: ON, and the X test's Run), in jogs of at most
-        // MAX_TURNS_PER_MOVE turns (Plan.h says why). spin() sends the first one and needs Idle,
-        // no alarm. keep_spinning(), called a few times a second, sends the next one once less
-        // than half a jog is left, so the tube turns on without a stop. It is false when X no
-        // longer turns: a jog cancel, a feed hold, an alarm, or the end of the last jog.
+        // The X test's Run: the tube (X) turns by one jog of MAX_TURNS_PER_MOVE turns (Plan.h
+        // says why no more) until jog_cancel() or the end of the jog. Needs Idle, no alarm.
         void spin(double rpm, int direction = 1);
-        bool keep_spinning();
-        // Ends a jog and waits until the controller has stopped (Idle, or stopped by an alarm).
-        // If it still moves after timeout_s, before_reset() is called and the controller is
-        // reset, which stops every motor at once. False then: the position is lost, home again.
-        bool stop_jog(double timeout_s, const std::function<void()>& before_reset = {});
         // A soft reset: every motor stops at once, the position is lost (homing needed). Unlike
         // recover() it does not unlock the controller.
         void reset();
@@ -80,7 +71,6 @@ namespace lathe {
 
     private:
         void require_idle();
-        void send_spin_jog();
         void command(const std::string& line, double timeout_s = -1, const std::string& what = "", bool from_alarm = false);
         void wait_until_idle(double timeout_s);
         [[noreturn]] void stopped(const Status& status, const std::string& what);
@@ -94,11 +84,6 @@ namespace lathe {
         double _poll_s;
         double _reply_s;
         double _reset_wait_s;
-        // the tube turning on its own: speed, direction, and the X (turns) where the jogs sent
-        // so far end
-        double _spin_rpm = 0;
-        int    _spin_dir = 1;
-        double _spin_end = 0;
     };
 
     bool is_busy_state(const std::string& state);

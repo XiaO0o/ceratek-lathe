@@ -37,8 +37,6 @@ namespace lathe {
         constexpr int H     = 320;
         constexpr int BAR_H = 40;
 
-        const double      STEPS[4]      = { 0.01, 0.1, 1.0, 5.0 };
-        const char* const STEP_NAMES[4] = { "0.01", "0.1", "1", "5" };
 
         // Manual page: larger steps, for setting up away from the tube.
         const double      MANUAL_STEPS[4]      = { 0.1, 1.0, 5.0, 10.0 };
@@ -135,8 +133,6 @@ namespace lathe {
         return a;
     }
 
-    std::string TouchUi::ask(const std::string& prompt) { return wait_answer(Ask::Move, prompt); }
-
     double TouchUi::ask_number(const std::string& prompt) {
         while (true) {
             std::string a   = wait_answer(Ask::Number, prompt);
@@ -166,19 +162,21 @@ namespace lathe {
 
     bool TouchUi::confirm(const std::string& prompt) { return wait_answer(Ask::Confirm, prompt) == "y"; }
 
-    Choice TouchUi::choose(const std::string& prompt) {
+    Choice TouchUi::choose(const std::string& prompt, const Labels& labels) {
         {
             Lock l(_mutex);
             _with_settings = false;
+            _labels        = labels;
         }
         std::string a = wait_answer(Ask::Choice, prompt);
         return a == "ok" ? Choice::Ok : Choice::Return;
     }
 
-    Choice TouchUi::choose_or_settings(const std::string& prompt) {
+    Choice TouchUi::choose_or_settings(const std::string& prompt, const Labels& labels) {
         {
             Lock l(_mutex);
             _with_settings = true;
+            _labels        = labels;
         }
         std::string a = wait_answer(Ask::Choice, prompt);
         {
@@ -188,10 +186,11 @@ namespace lathe {
         return a == "ok" ? Choice::Ok : a == "settings" ? Choice::Settings : Choice::Return;
     }
 
-    void TouchUi::offer(const std::string& prompt) {
+    void TouchUi::offer(const std::string& prompt, const Labels& labels) {
         Lock l(_mutex);
         _ask          = Ask::Choice;
         _prompt       = prompt;
+        _labels       = labels;
         _offered      = true;
         _offer_answer = Choice::None;
         _version++;
@@ -323,125 +322,6 @@ namespace lathe {
         // Nothing moves; the next move enables the motors again.
         auto release_motors = [&]() { _owner.release_motors(); };
 
-        // X: ON turns the tube on its own whenever nothing else moves, in jogs of at most 1000
-        // turns (Machine::spin). Anything else the machine does stops it first; afterwards it
-        // turns again if X is still on. A stop nobody asked the job task for (Pause, a switch,
-        // an alarm) switches X off, so the tube never starts again by itself after it.
-        auto set_spinning = [&](bool on) {
-            _spinning = on;
-            Lock l(_mutex);
-            _spin_active = on;
-            _spin_stop   = false;
-        };
-        // How long stopping the tube may take: slowing down from its speed at X's acceleration,
-        // and a margin.
-        auto spin_stop_s = [&]() {
-            double accel = _owner.acceleration(X_AXIS);
-            double slow  = accel > 0 ? double(_tube_rpm) / 60.0 / accel : 3.0;
-            return std::max(2.0, slow + 1.5);
-        };
-        // False when the tube did not stop when asked and the controller was reset to stop it
-        // (2026-11-27: a jog too long for FluidNC ignored Pause and X: OFF). Locate again then.
-        auto stop_spin = [&]() {
-            if (!_spinning) {
-                return true;
-            }
-            set_spinning(false);
-            auto before_reset = [&]() {
-                Lock l(_mutex);
-                _operator_stop = true;   // the reset's alarm is warned about below, not by the idle watch
-                _located       = false;  // the position is lost
-                _version++;
-            };
-            bool stopped;
-            try {
-                stopped = machine.stop_jog(spin_stop_s(), before_reset);
-            } catch (const std::exception&) {
-                before_reset();  // no answer to the status question: stop everything to be sure
-                try {
-                    machine.reset();
-                } catch (const std::exception&) {
-                }
-                stopped = false;
-            }
-            if (!stopped) {
-                warn("X did not stop when asked, so the controller was reset: every motor stopped at once. "
-                     "Press Locate before going on.");
-            }
-            return stopped;
-        };
-        auto resume_spin = [&](bool tell) {
-            if (!_x_on || _spinning) {
-                return;
-            }
-            Status s = machine.status();
-            if (s.alarmed()) {
-                if (tell) {
-                    say("X: the controller is in alarm, so the tube cannot turn yet. Press Locate (or Manual, Home) first.");
-                }
-                return;
-            }
-            try {
-                machine.spin(_tube_rpm);
-                set_spinning(true);
-                if (tell) {
-                    say(format("The tube turns at %.0f rev/min. X: OFF stops it.", double(_tube_rpm)));
-                }
-            } catch (const std::exception& e) {
-                if (tell) {
-                    say(std::string("X: the tube cannot turn now: ") + e.what());
-                }
-                // If the jog started all the same, it must not turn on untracked: stop it.
-                try {
-                    if (is_busy_state(machine.status().state)) {
-                        set_spinning(true);
-                        stop_spin();
-                    }
-                } catch (const std::exception&) {
-                }
-            }
-        };
-        // Between commands, while the tube turns on its own: send the next jog in time, and
-        // notice a stop.
-        auto look_after_spin = [&]() {
-            bool pause;
-            {
-                Lock l(_mutex);
-                pause = _spin_stop;
-            }
-            std::string trouble;
-            if (!pause) {
-                try {
-                    if (machine.keep_spinning()) {
-                        return;
-                    }
-                } catch (const std::exception& e) {
-                    trouble = e.what();
-                }
-            }
-            // Pause (FluidNC ends a jog on a feed hold) or trouble: make sure it stopped.
-            // Otherwise it has stopped already (an alarm, a switch, the end of the last jog).
-            bool stopped = true;
-            if (pause || !trouble.empty()) {
-                stopped = stop_spin();
-            } else {
-                set_spinning(false);
-            }
-            _x_on      = false;
-            bool alarm = false;
-            try {
-                alarm = machine.status().alarmed();
-            } catch (const std::exception&) {
-            }
-            if (stopped && !alarm) {  // an alarm gets its WARNING from the idle watch on the screen task
-                say(std::string(pause ? "Pause: the tube stopped." : "X: the tube stopped.") +
-                    (trouble.empty() ? "" : " " + trouble) + " X is OFF now; X: ON turns it again.");
-            }
-            release_motors();
-            Lock l(_mutex);
-            _version++;
-        };
-
         // A stop that reached the screen: a WARNING (red, three beeps) unless the operator made
         // it. The switches pressed now are named, unless the text already does.
         auto tell_stop = [&](const std::string& text) {
@@ -468,41 +348,13 @@ namespace lathe {
 
         while (true) {
             Command c;
-            // While the tube turns on its own, look after it four times a second between commands.
-            if (xQueueReceive(_commands, &c, _spinning ? pdMS_TO_TICKS(250) : portMAX_DELAY) != pdTRUE) {
-                if (_spinning) {
-                    look_after_spin();
-                }
-                continue;
-            }
+            xQueueReceive(_commands, &c, portMAX_DELAY);
             {
                 Lock l(_mutex);
                 _operator_stop = false;  // a new operation: an earlier own stop no longer counts
             }
             if (!_owner.motion_allowed()) {
                 Lock l(_mutex);  // the buttons are greyed out too; this is the second lock
-                _busy = false;
-                _version++;
-                continue;
-            }
-            bool spin_stopped = stop_spin();  // whatever comes next, the free-turning tube stops first
-            if (!spin_stopped) {
-                // The reset has been warned about; while this command runs (busy) the idle watch
-                // is quiet anyway, and a later stop in it is a new one.
-                Lock l(_mutex);
-                _operator_stop = false;
-            }
-
-            if (c.what == Do::SpinOn || c.what == Do::SpinOff) {
-                if (c.what == Do::SpinOn) {
-                    resume_spin(true);
-                } else {
-                    if (spin_stopped) {  // otherwise stop_spin() has warned about the reset
-                        say("X OFF: the tube stopped.");
-                    }
-                    release_motors();
-                }
-                Lock l(_mutex);
                 _busy = false;
                 _version++;
                 continue;
@@ -586,7 +438,6 @@ namespace lathe {
                     _ask     = Ask::None;
                     _version++;
                 }
-                resume_spin(false);
                 continue;
             }
 
@@ -632,33 +483,12 @@ namespace lathe {
                     _ask     = Ask::None;
                     _version++;
                 }
-                resume_spin(true);
                 continue;
             }
 
             // One manual operation, under the same rules as in the guided job.
             try {
                 switch (c.what) {
-                    case Do::Reset: {
-                        // As if nothing had happened: the controller is reset (position lost,
-                        // homing needed), and the screen forgets the location, the measured
-                        // length, the messages and the map.
-                        try {
-                            machine.recover();
-                        } catch (const std::exception& e) {
-                            say(e.what());
-                        }
-                        {
-                            Lock l(_mutex);
-                            _located  = false;
-                            _z_length = 0;
-                            _log.clear();
-                            _version++;
-                        }
-                        _want_map_reset = true;
-                        say("Reset: nothing is known. Press Locate to start.");
-                        break;
-                    }
                     case Do::Locate: {
                         double length = locate(machine, settings_now(), *this);
                         Lock   l(_mutex);
@@ -667,14 +497,24 @@ namespace lathe {
                         break;
                     }
                     case Do::Home:
+                        if (machine.status().alarmed()) {
+                            machine.recover();  // after a stop, as Locate does
+                        }
                         say("Going to the start corner (switches B and C): the tool moves back first, then along the tube.");
                         machine.home();
                         say("At the start corner.");
                         break;
-                    case Do::Recover:
+                    case Do::Recover: {
                         machine.recover();
-                        say("Recovered. Home the machine before cutting.");
+                        {
+                            Lock l(_mutex);
+                            _located = false;  // the position is lost (Reset used to say so)
+                            _version++;
+                        }
+                        _want_map_reset = true;
+                        say("Recovered: the position is lost. Press Locate before cutting.");
                         break;
+                    }
                     case Do::Jog: {
                         // Y and Z move at the set-up feed. (The turning tube axis is added later.)
                         // Once the position is known, a move stops at 0 and at the far end
@@ -723,9 +563,6 @@ namespace lathe {
                 Lock l(_mutex);
                 _busy = false;
                 _version++;
-            }
-            if (c.what != Do::Reset) {
-                resume_spin(c.what == Do::Locate || c.what == Do::Home || c.what == Do::Recover);
             }
         }
     }
@@ -1022,10 +859,6 @@ namespace lathe {
     }
 
     int TouchUi::hit(int32_t x, int32_t y) const {
-        if (_x_button.id != B_NONE && x >= _x_button.x && x < _x_button.x + _x_button.w && y >= _x_button.y &&
-            y < _x_button.y + _x_button.h) {
-            return _x_button.id;
-        }
         if (_menu_button.id != B_NONE && x >= _menu_button.x && x < _menu_button.x + _menu_button.w && y >= _menu_button.y &&
             y < _menu_button.y + _menu_button.h) {
             return _menu_button.id;
@@ -1043,14 +876,7 @@ namespace lathe {
     }
 
     void TouchUi::draw_status_bar(bool force) {
-        LiveStatus live = _owner.live();
-        bool       running;
-        Ask        ask;
-        {
-            Lock l(_mutex);
-            running = _running;
-            ask     = _ask;
-        }
+        LiveStatus    live    = _owner.live();
         const Status& s       = live.status;
         bool          stop    = live.valid && s.has_pin(STOP_PIN);
 
@@ -1079,8 +905,6 @@ namespace lathe {
             // Homing keeps every motor powered (FluidNC's rule), and on the bench nothing
             // visible moves, so it can look stopped. Give a way to end it.
             bar_id = B_STOP;
-        } else if (running && ask != Ask::None) {
-            bar_id = B_END;
         }
 
         uint32_t    beat = (xTaskGetTickCount() / pdMS_TO_TICKS(1000)) & 1;
@@ -1090,7 +914,7 @@ namespace lathe {
             Lock l(_mutex);
             off_main = _running || _manual || _xtest;
         }
-        std::string key  = state + "|" + pos + "|" + s.pins + "|" + std::to_string(bar_id) + "|" + (stop ? "S" : "") + (off_main ? "M" : "") + (_x_on ? "X" : "x");
+        std::string key  = state + "|" + pos + "|" + s.pins + "|" + std::to_string(bar_id) + "|" + (stop ? "S" : "") + (off_main ? "M" : "");
         if (!force && key == _drawn_bar) {
             // heartbeat only: a small square that blinks once a second while the screen task runs
             _lcd.fillRect(W - 6, 2, 4, 4, beat ? WHITE : bg);
@@ -1128,9 +952,6 @@ namespace lathe {
         // heartbeat: a small square that blinks once a second while the screen task runs
         _lcd.fillRect(W - 6, 2, 4, 4, beat ? WHITE : bg);
 
-        _x_button = Button { B_X_AXIS, int16_t(W - 272), 3, 78, int16_t(BAR_H - 6), _x_on ? "X: ON" : "X: OFF", true,
-                             _x_on ? DARK_GREEN : DARK };
-        draw_button(_x_button);
         _menu_button = Button {};
         if (off_main) {
             _menu_button = Button { B_MENU, int16_t(W - 190), 3, 82, int16_t(BAR_H - 6), "Main", true, DARK };
@@ -1138,8 +959,8 @@ namespace lathe {
         }
         _bar_button = Button {};
         if (bar_id != B_NONE) {
-            const char* label = bar_id == B_PAUSE ? "Pause" : bar_id == B_RESUME ? "Resume" : bar_id == B_STOP ? "Stop" : "End";
-            uint16_t    color = bar_id == B_END ? DARK : bar_id == B_STOP ? DARK_RED : DARK_GREEN;
+            const char* label = bar_id == B_PAUSE ? "Pause" : bar_id == B_RESUME ? "Resume" : "Stop";
+            uint16_t    color = bar_id == B_STOP ? DARK_RED : DARK_GREEN;
             _bar_button       = Button { bar_id, int16_t(W - 104), 3, 92, int16_t(BAR_H - 6), label, true, color };
             draw_button(_bar_button);
         }
@@ -1197,18 +1018,20 @@ namespace lathe {
                 _lcd.setTextColor(YELLOW, BLACK);
                 draw_wrapped(prompt, 8, H - 120, W - 232, 3);
                 _lcd.setTextColor(WHITE, BLACK);
-                bool with_settings;
+                bool   with_settings;
+                Labels labels;  // the step's own words, e.g. "Deeper" / "Depth OK"
                 {
                     Lock l(_mutex);
                     with_settings = _with_settings && !_offered;
+                    labels        = _labels;
                 }
                 if (with_settings) {
-                    add_button(B_RETURN, 8, H - 72, 76, 64, "Return");
+                    add_button(B_RETURN, 8, H - 72, 76, 64, labels.back);
                     add_button(B_SETTINGS, 88, H - 72, 76, 64, "Settings");
-                    add_button(B_OK, 168, H - 72, W - 392, 64, "OK", true, DARK_GREEN);
+                    add_button(B_OK, 168, H - 72, W - 392, 64, labels.ok, true, DARK_GREEN);
                 } else {
-                    add_button(B_RETURN, 8, H - 72, 108, 64, "Return");
-                    add_button(B_OK, 124, H - 72, W - 348, 64, "OK", true, DARK_GREEN);
+                    add_button(B_RETURN, 8, H - 72, 108, 64, labels.back);
+                    add_button(B_OK, 124, H - 72, W - 348, 64, labels.ok, true, DARK_GREEN);
                 }
                 place_map(W - 216, top, 208, H - top - 8);
                 break;
@@ -1272,24 +1095,6 @@ namespace lathe {
                 break;
             }
 
-            case Ask::Move: {
-                draw_log(8, top, 192, 104);
-                place_map(8, top + 110, 192, H - top - 118);
-                for (int i = 0; i < 4; i++) {
-                    add_button(B_STEP_0 + i, 208 + i * 67, top, 63, 46, STEP_NAMES[i], true, i == _step_index ? BLUE_SEL : 0);
-                }
-                _lcd.setFont(&lgfx::fonts::Font2);
-                _lcd.setTextDatum(lgfx::top_left);
-                _lcd.setTextColor(GREY, BLACK);
-                _lcd.drawString("Step in mm", 208, top + 50);
-                _lcd.setTextColor(WHITE, BLACK);
-                add_button(B_Y_TOWARD, 208, top + 68, 128, 58, "Y to tube");
-                add_button(B_Y_AWAY, 344, top + 68, 128, 58, "Y away");
-                add_button(B_Z_ALONG, 208, top + 132, 128, 58, "Z along");
-                add_button(B_Z_BACK, 344, top + 132, 128, 58, "Z back");
-                add_button(B_DONE, 208, top + 200, 264, 68, "Done: it touches", true, DARK_GREEN);
-                break;
-            }
         }
     }
 
@@ -1305,10 +1110,6 @@ namespace lathe {
         place_map(W - 164, top, 156, 150);
         _lcd.setFont(&lgfx::fonts::Font2);
         _lcd.setTextDatum(lgfx::top_left);
-        _lcd.setTextColor(GREY, BLACK);
-        char info[96];
-        std::snprintf(info, sizeof(info), "Free memory %u bytes", unsigned(xPortGetFreeHeapSize()));
-        _lcd.drawString(info, 8, 206);
         bool allowed = _owner.motion_allowed();
         if (!allowed) {
             _lcd.setTextColor(YELLOW, BLACK);
@@ -1325,13 +1126,13 @@ namespace lathe {
             _lcd.drawString("Press Locate first: the position is not known yet.", 8, 222);
         }
         _lcd.setTextColor(WHITE, BLACK);
-        add_button(B_LOCATE, 8, 244, 78, 68, busy ? "Working" : "Locate", allowed && !busy, located ? 0 : DARK_GREEN);
-        add_button(B_SPEEDS, 90, 244, 70, 68, "Speeds", !busy);
-        add_button(B_START, 164, 244, 100, 68, "Start new tube", allowed && !busy && located, located ? DARK_GREEN : 0);
-        add_button(B_MANUAL, 268, 244, 68, 68, "Manual", allowed && !busy);
-        add_button(B_CALIBRATE, 340, 244, 72, 68, "Calibrate", !busy);
-        add_button(B_RESET, 416, 244, 56, 68, "Reset", !busy);
-        add_button(B_XTEST, W - 124, 194, 116, 42, "Test X motor", allowed && !busy);
+        // What the operator needs, in the order of use (2026-11-27). Calibrate and Test X motor
+        // are on the Manual page; Reset is gone (Locate recovers after a stop by itself).
+        const int bw = (W - 16 - 3 * 6) / 4;
+        add_button(B_LOCATE, 8, 244, bw, 68, busy ? "Working" : "Locate", allowed && !busy, located ? 0 : DARK_GREEN);
+        add_button(B_START, 8 + (bw + 6), 244, bw, 68, "Start new tube", allowed && !busy && located, located ? DARK_GREEN : 0);
+        add_button(B_SPEEDS, 8 + 2 * (bw + 6), 244, bw, 68, "Speeds", !busy);
+        add_button(B_MANUAL, 8 + 3 * (bw + 6), 244, bw, 68, "Manual", !busy);
     }
 
     // X motor test page: the X motor alone, at a chosen speed.
@@ -1359,7 +1160,8 @@ namespace lathe {
         add_button(B_BACK, 208, top + 232, 264, 36, busy ? "Working..." : "Back", true);
     }
 
-    // Manual page: home, recover, and moves for setting up, under the same rules as a job.
+    // Manual page: home, recover, and moves for setting up, under the same rules as a job; and the
+    // service tools (the X motor test, touch calibration).
     void TouchUi::draw_manual_page() {
         bool busy;
         {
@@ -1379,6 +1181,8 @@ namespace lathe {
         add_button(B_M_Y_AWAY, 344, top + 90, 128, 42, "Y away", on);
         add_button(B_M_Z_ALONG, 208, top + 138, 128, 42, "Z along", on);
         add_button(B_M_Z_BACK, 344, top + 138, 128, 42, "Z back", on);
+        add_button(B_XTEST, 208, top + 186, 128, 40, "Test X motor", on);
+        add_button(B_CALIBRATE, 344, top + 186, 128, 40, "Calibrate", !busy);
         add_button(B_BACK, 208, top + 232, 264, 36, busy ? "Working..." : "Back", !busy);
     }
 
@@ -1716,7 +1520,7 @@ namespace lathe {
                 return;  // the job task deals with it, or the operator made it
             }
         }
-        warn("Stopped while no job or manual move was running (with X: ON, the tube stops too)." + switch_note(live.status) +
+        warn("Stopped while no job or manual move was running." + switch_note(live.status) +
              " Press Locate (or Manual, Home) before going on.");
     }
 
@@ -1758,17 +1562,6 @@ namespace lathe {
             }
             return;
         }
-        if (id >= B_STEP_0 && id <= B_STEP_3) {
-            _step_index = id - B_STEP_0;
-            for (auto& b : _buttons) {
-                if (b.id >= B_STEP_0 && b.id <= B_STEP_3) {
-                    b.fill = (b.id - B_STEP_0) == _step_index ? BLUE_SEL : 0;
-                    draw_button(b);
-                }
-            }
-            return;
-        }
-        char move[32];
         switch (id) {
             case B_START:
                 _trail.clear();  // the map shows this job's path only
@@ -1777,9 +1570,6 @@ namespace lathe {
             case B_LOCATE:
                 _trail.clear();
                 send_command(Do::Locate);
-                break;
-            case B_RESET:
-                send_command(Do::Reset);
                 break;
             case B_MENU: {
                 // Back to the main page from anywhere: a moving or paused machine is stopped at
@@ -1807,7 +1597,6 @@ namespace lathe {
                     Lock l(_mutex);
                     busy = _busy;
                 }
-                // The tube turning on its own (X: ON) is not stopped by Main: X: OFF does that.
                 if ((running || busy) && (state == "Run" || state == "Jog" || state == "Hold" || state == "Home")) {
                     uint8_t b = RT_SOFT_RESET;
                     _owner.outbox().push(&b, 1);
@@ -1821,25 +1610,6 @@ namespace lathe {
             case B_SETTINGS:
                 answer("settings");
                 break;
-            case B_X_AXIS: {
-                // The third axis switch. With nothing else running the tube starts or stops
-                // turning at once; during a job it decides whether the tube turns in the cut
-                // (a cut already moving keeps going as it started), and the tube turns on its
-                // own again after the job if X is still on.
-                _x_on = !_x_on;
-                bool running;
-                {
-                    Lock l(_mutex);
-                    running = _running;
-                }
-                if (running) {
-                    say(_x_on ? "Third axis (X) ON: the tube turns during the cut." : "Third axis (X) OFF: the cut runs without turning the tube.");
-                } else {
-                    send_command(_x_on ? Do::SpinOn : Do::SpinOff);
-                }
-                draw_status_bar(true);
-                break;
-            }
             case B_SPEEDS:
                 send_command(Do::Speeds);
                 break;
@@ -1866,7 +1636,8 @@ namespace lathe {
                     Lock l(_mutex);
                     leaving_test = _xtest;
                     if (leaving_test) {
-                        _xtest = false;  // Back from the X test always works, and stops X
+                        _xtest  = false;  // Back from the X test always works, and stops X
+                        _manual = true;   // back to the Manual page it was opened from
                         _version++;
                     } else if (!_busy) {
                         _manual = id == B_MANUAL;
@@ -1889,7 +1660,8 @@ namespace lathe {
                     if (_busy) {
                         break;
                     }
-                    _xtest = true;
+                    _manual = false;
+                    _xtest  = true;
                     _version++;
                 }
                 say("X motor test. Pick a speed, then +1 turn (watch the shaft) or Run. Shakes but never turns, "
@@ -1955,12 +1727,6 @@ namespace lathe {
             case B_PAUSE: {
                 uint8_t b = RT_FEED_HOLD;
                 _owner.outbox().push(&b, 1);
-                // While the tube turns on its own (X: ON), FluidNC ends the jog on a feed hold;
-                // the job task then makes sure it stopped, and switches X off.
-                Lock l(_mutex);
-                if (_spin_active) {
-                    _spin_stop = true;
-                }
                 break;
             }
             case B_RESUME: {
@@ -1977,21 +1743,6 @@ namespace lathe {
                 }
                 uint8_t b = RT_SOFT_RESET;
                 _owner.outbox().push(&b, 1);
-                break;
-            }
-            case B_END: {
-                _entry.clear();
-                bool offered;
-                {
-                    Lock l(_mutex);
-                    offered = _offered;
-                    if (offered) {
-                        _offer_answer = Choice::End;
-                    }
-                }
-                if (!offered) {
-                    answer("", true);
-                }
                 break;
             }
             case B_YES:
@@ -2024,21 +1775,6 @@ namespace lathe {
                     _entry.clear();
                     answer(v);
                 }
-                break;
-            case B_Y_TOWARD:
-            case B_Y_AWAY:
-            case B_Z_ALONG:
-            case B_Z_BACK: {
-                // The session turns these into jogs with the directions from config.yaml,
-                // exactly as it does with "y 0.5" typed at the laptop.
-                char   axis = (id == B_Y_TOWARD || id == B_Y_AWAY) ? 'y' : 'z';
-                double sign = (id == B_Y_TOWARD || id == B_Z_ALONG) ? 1.0 : -1.0;
-                std::snprintf(move, sizeof(move), "%c %g", axis, sign * STEPS[_step_index]);
-                answer(move);
-                break;
-            }
-            case B_DONE:
-                answer("done");
                 break;
             default:
                 break;

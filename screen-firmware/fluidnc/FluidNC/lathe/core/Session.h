@@ -21,11 +21,16 @@ namespace lathe {
     // End: the operator ended the session while the buttons were offered.
     enum class Choice { None, Ok, Return, End, Settings };
 
+    // What a step's two buttons say on the screen (2026-11-27: "Deeper" rather than "Return").
+    struct Labels {
+        std::string ok   = "OK";
+        std::string back = "Return";
+    };
+
     class Ui {
     public:
         virtual ~Ui()                                         = default;
         virtual void        say(const std::string& text)       = 0;
-        virtual std::string ask(const std::string& prompt)     = 0;  // used for the touch moves
         virtual double      ask_number(const std::string& prompt) = 0;
         virtual bool        confirm(const std::string& prompt)    = 0;
 
@@ -39,12 +44,12 @@ namespace lathe {
         }
 
         // OK / Return, waiting for the answer (throws Quit if the session is ended instead).
-        virtual Choice choose(const std::string& prompt) = 0;
+        virtual Choice choose(const std::string& prompt, const Labels& labels) = 0;
         // The same with a third button that opens the movement settings (returns Settings).
-        virtual Choice choose_or_settings(const std::string& prompt) { return choose(prompt); }
+        virtual Choice choose_or_settings(const std::string& prompt, const Labels& labels) { return choose(prompt, labels); }
         // OK / Return shown while the machine moves: offer() shows them, poll_choice() returns
         // None until one is pressed (each press once), withdraw() takes them away.
-        virtual void   offer(const std::string& prompt) = 0;
+        virtual void   offer(const std::string& prompt, const Labels& labels) = 0;
         virtual Choice poll_choice()                    = 0;
         virtual void   withdraw()                       = 0;
         // The operator went back to the main page: the session must end without doing more.
@@ -57,7 +62,8 @@ namespace lathe {
         // The operator stopped the machine (the main-page button, Stop during homing): the stop
         // that follows is a message, not a warning.
         virtual bool stopped_on_purpose() { return aborted(); }
-        // The third axis (X, the tube) switch on the screen: does the tube turn during the cut?
+        // Does the tube (X) turn during the cut? The screen always says yes (2026-11-27); a test
+        // may say no.
         virtual bool rotation_on() { return true; }
     };
 

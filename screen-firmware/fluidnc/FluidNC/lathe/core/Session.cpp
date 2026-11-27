@@ -81,9 +81,8 @@ namespace lathe {
             ui.say(format("Round %d: the tool moves to %.3f mm toward the tube.", result.rounds, depth));
             machine.run({ "G21 G90", "G1 Y" + fixed(settings.y_toward_tube * depth, 3) + " F" + fixed(_move_feed, 1) });
             Choice c;
-            while ((c = ui.choose_or_settings(format("Is this position right? OK: yes, measure the length. Return: no, %.3f mm "
-                                                     "further. Settings: change the step and the speed.",
-                                                     _step))) == Choice::Settings) {
+            while ((c = ui.choose_or_settings(format("Is this depth right? Deeper: %.3f mm further. Settings: step and speed.", _step),
+                                              Labels { "Depth OK", "Deeper" })) == Choice::Settings) {
                 movement_settings();  // nothing moves; the same question again
             }
             if (c == Choice::Ok) {
@@ -132,7 +131,7 @@ namespace lathe {
             ui.say("Measuring the length: the tool moves slowly toward switch A.");
             size_t mark = machine.link.unsolicited.size();  // alarms after this are this measurement's
             machine.jog_start('Z', a_z, _move_feed);
-            ui.offer("OK: the length is this long. Return: not right, back to the start and measure again.");
+            ui.offer("Stop here when the length is right. Measure again: back to the start.", Labels { "Stop here", "Measure again" });
             Choice c = Choice::None;
             bool   at_end  = false;  // switch A, or the farthest the measurement may go
             bool   alarmed = false;
@@ -233,9 +232,9 @@ namespace lathe {
                     i = 0;
                 }
             }
-            Choice c = ui.choose(format("Cut %.1f mm at depth %.3f mm, tube %.0f rev/min (third axis %s), feed %.0f mm/min? "
-                                        "OK: start cutting. Return: change the values.",
-                                        result.length_mm, result.depth_mm, rpm, ui.rotation_on() ? "on" : "OFF", feed));
+            Choice c = ui.choose(format("Cut %.1f mm at depth %.3f mm, tube %.0f rev/min%s, feed %.0f mm/min?", result.length_mm,
+                                        result.depth_mm, rpm, ui.rotation_on() ? "" : " (third axis OFF: the tube does not turn)", feed),
+                                 Labels { "Start cut", "Change" });
             if (c == Choice::Ok) {
                 result.tube_rpm            = rpm;
                 result.cut_feed_mm_per_min = feed;
@@ -250,7 +249,7 @@ namespace lathe {
         CutSettings chosen  = settings;
         chosen.tube_rpm            = result.tube_rpm;
         chosen.cut_feed_mm_per_min = result.cut_feed_mm_per_min;
-        chosen.rotate              = ui.rotation_on();  // as the switch is when the cut starts
+        chosen.rotate              = ui.rotation_on();  // always on the screen: the tube turns in the cut, then stops
         ui.say(format(chosen.rotate ? "Cutting: the tube turns, the tool cuts %.1f mm at depth %.3f mm."
                                     : "Cutting (third axis off, the tube does not turn): the tool goes %.1f mm at depth %.3f mm.",
                       result.length_mm, result.depth_mm));
@@ -315,6 +314,12 @@ namespace lathe {
     }
 
     double locate(Machine& machine, const CutSettings& settings, Ui& ui) {
+        // After a stop the controller may still be in alarm, and some alarms (the stop input,
+        // switch A outside a probing move) refuse homing until a reset: recover first, so that
+        // Locate alone brings the machine back (2026-11-27; it used to need Reset first).
+        if (machine.status().alarmed()) {
+            machine.recover();
+        }
         ui.say("Locating: the tool goes back to switch B, then along the tube to switch C.");
         machine.home();
         ui.say("At switch C. Now along the tube to switch A, to measure the length.");

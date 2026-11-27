@@ -15,26 +15,29 @@ vectors.txt) is gone. The turning tube axis is added later.
   touch A again with the tool at depth.
 - Warnings: the buzzer (`beeper_pin: I2SO.7`) sounds only for a stop nobody planned, shown in red
   as `WARNING:` on the screen. That means a switch touched during the depth steps, the cut, the
-  way back, a manual move or the free-turning tube, or a failed homing.
+  way back or a manual move, or a failed homing.
   - Planned switch touches are messages only: homing at B and C, Locate and the length
     measurement at A.
   - Stops the operator makes are messages only: Main, or Stop during homing.
   - The buttons no longer click.
 
-**2026-11-27, found on the board with X: ON:**
-- X: ON sent one jog of 100000 turns. FluidNC does its motion maths in 32-bit floats, so the
-  tube crawled at about 0.7 rev/min instead of 200. Pause, X: OFF and a jog cancel could not
-  stop it; only a reset did.
-- Now no move turns the tube more than 1000 turns (`MAX_TURNS_PER_MOVE` in `lathe/core/Plan.h`).
-  While X is on, the screen sends the next jog before the last one runs out, so the tube turns
-  without a stop. A cut of more than 1000 turns is sent as several equal moves.
-- X: OFF, and Pause while the tube turns on its own, check that X really stopped. If it still
-  moves after its slow-down time plus 1.5 s, the controller is reset: a red WARNING, 3 beeps,
-  and Locate again.
-- Pause, a switch or an alarm during X: ON switch X off, so the tube does not start again by
-  itself.
-- X now goes up to 180 rev/min, and the cut uses 180 by default. On the desk (stand-in motor,
-  no load) 200 ran for 6 minutes without trouble, and 240 shook too much.
+**2026-11-27:**
+- The tube (X) turns by itself during the cut and stops with it. The X: ON / OFF switch is gone,
+  so there is nothing to forget before a cut, and the tube never turns on its own between jobs.
+  It does not turn during the depth rounds either (decided for now; to look at again on the
+  machine). Test X motor (home page) still turns the motor alone.
+- Found on the board before that: X: ON sent one jog of 100000 turns. FluidNC does its motion
+  maths in 32-bit floats, so the tube crawled at about 0.7 rev/min instead of 200, and neither
+  Pause, X: OFF nor a jog cancel stopped it; only a reset did. Now no move turns the tube more
+  than 1000 turns (`MAX_TURNS_PER_MOVE` in `lathe/core/Plan.h`): a longer cut is sent as
+  several equal moves, and the X test's Run stops after 1000 turns.
+- A simpler screen. The home page has Locate, Start new tube, Speeds and Manual; Calibrate and
+  Test X motor are on the Manual page. Reset and the status bar's End are gone: Main does what
+  End did, and Locate (and Home) reset the controller first after a stop. Each step's buttons
+  say what they do: Deeper / Depth OK, Measure again / Stop here, Change / Start cut. The unused
+  touch-move page is removed.
+- X goes up to 180 rev/min, and the cut uses 180 by default. On the desk (stand-in motor, no
+  load) 200 ran for 6 minutes without trouble, and 240 shook too much.
 
 
 FluidNC v4.1.1 plus one added module, `lathe_screen`, that drives the MKS TS35-R on the MKS

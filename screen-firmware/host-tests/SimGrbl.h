@@ -81,13 +81,12 @@ namespace lathe_test {
                     tick();
                     say(status_line());
                 } else if (c == 0x18) {
-                    resets++;
                     _rx.clear();
                     _busy     = 0;
                     _critical = pins.count('E') > 0;  // a held stop switch survives the reset
                     boot();
                 } else if (c == static_cast<char>(0x85)) {  // jog cancel: stops where it is
-                    if (state == "Jog" && !jog_cancel_ignored) {
+                    if (state == "Jog") {
                         state = "Idle";
                         _busy = 0;
                     }
@@ -123,9 +122,6 @@ namespace lathe_test {
         double                   pos[3]       = { 0, 0, 0 };  // machine position X, Y, Z
         double                   switch_a_z   = 1e9;          // where switch A (the probe) is touched on Z
         int                      polls        = 0;
-        int                      resets       = 0;            // soft resets (Ctrl-X) received
-        // As FluidNC with a jog too long for its float maths (2026-11-27): a jog cancel never ends it
-        bool                     jog_cancel_ignored = false;
         // test hooks: called before each status poll is answered; replaces execution of a line
         std::function<void(int)>                 on_poll;
         std::function<bool(const std::string&)> intercept;
