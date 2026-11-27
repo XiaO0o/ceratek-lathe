@@ -44,7 +44,7 @@ axes:
 
   x:                                     # tube rotation
     steps_per_mm: 3200.000               # 200 steps x 16 microsteps = 1 revolution per unit (T4)
-    max_rate_mm_per_min: 200.000         # 200 rev/min (2026-11-26). T6 on the stand-in motor (12 V, no load) was smooth up to 200 and lost steps from 300: watch for lost steps once the tube is in
+    max_rate_mm_per_min: 180.000         # 180 rev/min (2026-11-27): on the desk (stand-in motor, 12 V, no load) 200 ran 6 min smoothly and 240 shook too much; T6 lost steps from 300. Watch for lost steps once the tube is in
     acceleration_mm_per_sec2: 2.000      # BENCH: 2 rev/s^2
     max_travel_mm: 1000000.000           # unused: this axis turns without end
     soft_limits: false
@@ -175,7 +175,7 @@ lathe_screen:
   cut_feed_mm_per_min: 60.0      # GROUP: speed of the depth steps, the length measurement and the cut
   # Turning speed of the tube during the cut (X axis), at most X's max_rate above. Once a speed
   # has been saved on the Speeds page, the screen uses that one instead.
-  tube_rpm: 200.0
+  tube_rpm: 180.0
   # When the length measurement ends at switch A, the cut stops this much short of where A was
   # touched, so that the cut does not touch A again (that would be a stop with the tool at depth).
   switch_a_margin_mm: 1.0

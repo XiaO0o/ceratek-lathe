@@ -33,6 +33,8 @@ vectors.txt) is gone. The turning tube axis is added later.
   and Locate again.
 - Pause, a switch or an alarm during X: ON switch X off, so the tube does not start again by
   itself.
+- X now goes up to 180 rev/min, and the cut uses 180 by default. On the desk (stand-in motor,
+  no load) 200 ran for 6 minutes without trouble, and 240 shook too much.
 
 
 FluidNC v4.1.1 plus one added module, `lathe_screen`, that drives the MKS TS35-R on the MKS
