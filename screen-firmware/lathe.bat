@@ -1,0 +1,3 @@
+@echo off
+rem Ceratek lathe touchscreen firmware: Windows launcher for lathe.ps1. Usage: lathe setup, lathe build, lathe flash ...
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0lathe.ps1" %*

@@ -1,0 +1,33 @@
+# Rotation speed steps under FluidNC v4.1.1 (bench test T6)
+# captured: 2026-11-14. Motor on X-Motor, 12 V supply, no load. A temporary configuration raised the X limit to 600 rev/min and the acceleration to 10 rev/s^2.
+# Seen at the motor: 60 to 200 rev/min normal; from 300 rev/min not normal (lost steps).
+
+## 60 to 120 rev/min, the limit in the configuration at the time
+   2.6s start: <Idle|MPos:37.500,0.000,0.000|FS:0,0>
+   2.6s step 1: 60 rev/min for 5 turns -> ok
+   8.2s         done in 5.6s, peak reported rate 60, state Idle
+  11.2s step 2: 75 rev/min for 6.25 turns -> ok
+  16.8s         done in 5.6s, peak reported rate 75, state Idle
+  19.8s step 3: 90 rev/min for 7.5 turns -> ok
+  25.5s         done in 5.8s, peak reported rate 90, state Idle
+  28.6s step 4: 105 rev/min for 8.75 turns -> ok
+  34.4s         done in 5.9s, peak reported rate 105, state Idle
+  37.5s step 5: 120 rev/min for 10 turns -> ok
+  43.5s         done in 6.0s, peak reported rate 120, state Idle
+  46.5s unsolicited: []
+
+## 150 to 600 rev/min, temporary configuration
+   2.5s start: <Idle|MPos:179.167,0.000,0.000|FS:0,0>
+   2.5s step 1: 150 rev/min for 12.5 turns -> ok
+   7.8s         done in 5.3s, peak reported rate 150, state Idle
+  10.8s step 2: 200 rev/min for 16.667 turns -> ok
+  16.1s         done in 5.3s, peak reported rate 200, state Idle
+  19.1s step 3: 300 rev/min for 25 turns -> ok
+  24.6s         done in 5.5s, peak reported rate 300, state Idle
+  27.6s step 4: 400 rev/min for 33.333 turns -> ok
+  33.2s         done in 5.6s, peak reported rate 400, state Idle
+  36.2s step 5: 500 rev/min for 41.667 turns -> ok
+  41.9s         done in 5.7s, peak reported rate 500, state Idle
+  44.9s step 6: 600 rev/min for 50 turns -> ok
+  50.8s         done in 5.8s, peak reported rate 600, state Idle
+  53.8s unsolicited: []

@@ -33,7 +33,9 @@ These cannot be done on the bench:
   dependent on timing to complete.
 - Measure and set the driver current (needs a multimeter), then hold the motors when idle
   (`idle_ms: 255`). They are released for now because the stand-in motor overheated when held.
-- Find the highest reliable rotation speed. 10 to 60 rev/min ran cleanly; nothing faster was tried.
+- Measure the rotation speed limit again with the real motor and the tube holder. On the bench
+  (12 V, no load) the motor ran smoothly up to 200 rev/min and lost steps from 300; the
+  configuration allows 150.
 - Replace the plain jumper plugs on the motor and limit switch leads with latching plugs or
   crimped terminals. All three faults on the bench were plugs that had worked loose.
 - Set the values in [config/lathe.toml](config/lathe.toml) and the speeds and travels in the

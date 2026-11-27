@@ -1,0 +1,8 @@
+# Downloaded by ./lathe.sh setup (FluidNC source, PlatformIO and the ESP32 tools) and the
+# firmware images ./lathe.sh build makes: large, and made again on any computer.
+work/
+output/
+
+# The PC tests' program (host-tests/run.sh)
+host-tests/lathe_tests
+host-tests/lathe_tests.dSYM/

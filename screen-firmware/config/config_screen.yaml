@@ -1,0 +1,184 @@
+# FluidNC configuration for the Ceratek ceramic tube lathe.
+# Controller: MKS DLC32 V2.2, three TMC2209 drivers in stand-alone mode.
+# Written for FluidNC v4.1.1 (key names checked against that release's source).
+#
+# STATUS: bench configuration. Nothing here has run on the board yet.
+#   - Pin numbers are from the MKS DLC32 V2.1 drawings. The limit headers and the motor
+#     headers were confirmed on our V2.2 board (bench tests T3 and T4); the I2S and SD card
+#     pins were not checked separately.
+#   - Every value marked BENCH is a safe starting point for the stand-in motor. It is
+#     measured again on the machine and changed here, never in code.
+#
+# Axis roles (docs/hardware.md, "Planned lathe wiring"):
+#   X = tube rotation      unit: 1 revolution      added later (not on the bench yet)
+#   Y = toward the tube    unit: 1 mm              homes at switch B (retracted end)
+#   Z = along the tube     unit: 1 mm              homes at switch C (start end); switch A at the far end
+# Start corner = B and C both touched (homing). Plan of a pass: lathe/core/Plan.h.
+
+board: MKS DLC32 V2.2
+name: Ceratek tube lathe (bench, touchscreen)
+meta: 2026-11-19, bench configuration with lathe_screen; needs the Ceratek firmware build
+
+kinematics:
+  Cartesian:
+
+stepping:
+  engine: I2S_STATIC       # step and direction go through the 74HC595 shift register
+  # BENCH: release the motors 250 ms after a move ends. With 255 (never release) the stand-in
+  # motor became too hot to touch within minutes on 2026-11-14, because the driver current has
+  # not been measured or set yet. The lathe needs 255 to hold its depth of cut; go back to it
+  # only after Vref has been set with a multimeter (docs/hardware.md, section 3).
+  idle_ms: 250
+  pulse_us: 4
+  dir_delay_us: 1
+  disable_delay_us: 0
+
+i2so:
+  bck_pin: gpio.16
+  data_pin: gpio.21
+  ws_pin: gpio.17
+
+axes:
+  shared_stepper_disable_pin: I2SO.0     # one enable line for all three drivers
+  homing_runs: 1                         # 2026-11-24: each switch is touched once (approach, pull off); 2 adds a slow second touch
+
+  x:                                     # tube rotation
+    steps_per_mm: 3200.000               # 200 steps x 16 microsteps = 1 revolution per unit (T4)
+    max_rate_mm_per_min: 180.000         # 180 rev/min (2026-11-27): on the desk (stand-in motor, 12 V, no load) 200 ran 6 min smoothly and 240 shook too much; T6 lost steps from 300. Watch for lost steps once the tube is in
+    acceleration_mm_per_sec2: 2.000      # BENCH: 2 rev/s^2
+    max_travel_mm: 1000000.000           # unused: this axis turns without end
+    soft_limits: false
+    # no homing section: a rotating axis has nothing to find
+    motor0:
+      hard_limits: false
+      stepstick:
+        step_pin: I2SO.1
+        direction_pin: I2SO.2
+
+  y:                                     # tool toward / away from the tube; switch B at the start end
+    steps_per_mm: 400.000                # 3200 steps per turn / 8 mm lead screw
+    max_rate_mm_per_min: 960.000         # 120 motor rev/min x 8 mm lead (2026-11-26); the moves themselves are slower (jog_feed_mm_per_min, homing)
+    acceleration_mm_per_sec2: 50.000     # BENCH
+    max_travel_mm: 100.000               # BENCH: set from the real travel on the machine
+    soft_limits: true
+    homing:
+      cycle: 1                           # homed first: the tool retracts before anything else moves
+      positive_direction: false          # BENCH: decided by where the switch sits on the machine
+      mpos_mm: 0.000
+      feed_mm_per_min: 60.000
+      seek_mm_per_min: 120.000           # 2026-11-24: slower, the group found 300 too fast
+      settle_ms: 250
+      seek_scaler: 1.100
+      feed_scaler: 5.000                 # BENCH: the slow second touch may search 5 x pulloff = 10 mm (10 s at 60 mm/min), time to press a switch by hand; 1.100 on the machine
+    motor0:
+      limit_neg_pin: gpio.35:low         # "Y" header; the switch pulls the line to 0 V when pressed (T3)
+      hard_limits: true
+      pulloff_mm: 2.000
+      stepstick:
+        step_pin: I2SO.5
+        direction_pin: I2SO.6
+
+  z:                                     # along the tube; switch C at the start end, switch A (probe) at the far end
+    steps_per_mm: 400.000
+    max_rate_mm_per_min: 960.000         # 120 motor rev/min x 8 mm lead (2026-11-26), as Y
+    acceleration_mm_per_sec2: 50.000     # BENCH
+    max_travel_mm: 250.000               # BENCH: set from the real travel on the machine
+    soft_limits: true
+    homing:
+      cycle: 2
+      positive_direction: false          # BENCH
+      mpos_mm: 0.000
+      feed_mm_per_min: 60.000
+      seek_mm_per_min: 120.000           # 2026-11-24: slower, the group found 300 too fast
+      settle_ms: 250
+      seek_scaler: 1.100
+      feed_scaler: 5.000                 # BENCH: the slow second touch may search 5 x pulloff = 10 mm (10 s at 60 mm/min), time to press a switch by hand; 1.100 on the machine
+    motor0:
+      limit_neg_pin: gpio.34:low         # "Z" header
+      hard_limits: true
+      pulloff_mm: 2.000
+      stepstick:
+        step_pin: I2SO.3
+        direction_pin: I2SO.4
+
+control:
+  # 2026-11-24, the group's plan: the switch on the "X" header is switch A (far end of Z),
+  # used as the probe input below. No stop switch is wired.
+  estop_pin: NO_PIN
+  safety_door_pin: NO_PIN
+  reset_pin: NO_PIN
+  feed_hold_pin: NO_PIN
+  cycle_start_pin: NO_PIN
+
+probe:
+  # Switch A, at the far end of the tube (Z). Each pass travels along the tube until it is
+  # touched (G38.2). Wired to the "X" limit header (gpio.36), pulls to 0 V when pressed.
+  pin: gpio.36:low
+  # 2026-11-24, the group's rule: any switch touched at any time stops the machine. Outside a
+  # probing move (homing, jogs, cuts, the way back) switch A stops it like a hard limit.
+  probe_hard_limit: true
+
+coolant:
+  flood_pin: NO_PIN
+  mist_pin: NO_PIN
+
+spi:
+  miso_pin: gpio.12
+  mosi_pin: gpio.13
+  sck_pin: gpio.14
+
+sdcard:
+  cs_pin: gpio.15
+  card_detect_pin: NO_PIN
+
+start:
+  must_home: true          # after power-up or a stop, Y and Z must be homed before they move
+  check_limits: true
+
+NoSpindle:                 # the tube is turned by the X axis; nothing drives the laser/spindle output
+
+# The TS35 touchscreen and the guided sequence (Ceratek firmware build only).
+# Stock FluidNC does not know this block and stops with a configuration alarm: to go back to
+# stock FluidNC, upload config_stock.yaml as config.yaml.
+lathe_screen:
+  sck_pin: gpio.18
+  mosi_pin: gpio.23
+  miso_pin: gpio.19
+  lcd_cs_pin: gpio.25
+  lcd_dc_pin: gpio.33
+  lcd_reset_pin: gpio.27
+  touch_cs_pin: gpio.26
+  backlight_pin: gpio.5:low      # seen 2026-11-21: the screen lights with this setting (as MKS firmware does for board 002)
+  # The screen's buzzer (I2SO.7 on the DLC32 V2.1 drawing; the factory firmware's touch beep
+  # worked on our V2.2 board). It sounds only for a WARNING: a stop nobody planned, such as a
+  # switch touched during a cut. Planned switch touches (homing at B and C, Locate and the length
+  # measurement at A) and button presses are silent. Check once: press switch B by hand while
+  # the machine is Idle after homing; the screen must show a red WARNING and beep 3 times. If it
+  # beeps without end, write I2SO.7:low; if it never beeps, write NO_PIN and tell the group.
+  beeper_pin: I2SO.7
+  rotation: 1                    # 0-3: turn the picture to match how the screen is mounted
+  lcd_spi_hz: 40000000           # lower to 20000000 if the picture shows specks or wrong colours
+  touch_spi_hz: 2500000
+  invert_colors: false           # true if black and white are swapped
+  swap_red_blue: false           # true if red shows as blue
+  status_interval_ms: 250
+
+  # false: the screen shows the status and can be calibrated, but cannot start anything.
+  # Set true only after the screen tests in the guide (S1-S3) have passed.
+  allow_motion: true             # 2026-11-21: on after the bench tests S1-S3 passed; false keeps the screen from moving anything
+
+  # The group's plan (2026-11-24). Values marked GROUP are to be set by the group.
+  # GROUP: each round moves the tool this much further toward the tube. Each new tube starts
+  # by asking for the step (0.01 to 10 mm); this is only the first value shown, and from then on
+  # the screen shows the step used last (kept in flash).
+  depth_step_mm: 1.0
+  cut_feed_mm_per_min: 60.0      # GROUP: speed of the depth steps, the length measurement and the cut
+  # Turning speed of the tube during the cut (X axis), at most X's max_rate above. Once a speed
+  # has been saved on the Speeds page, the screen uses that one instead.
+  tube_rpm: 180.0
+  # When the length measurement ends at switch A, the cut stops this much short of where A was
+  # touched, so that the cut does not touch A again (that would be a stop with the tool at depth).
+  switch_a_margin_mm: 1.0
+  y_toward_tube: 1
+  z_cut_direction: 1
+  jog_feed_mm_per_min: 120.0     # set-up moves and the way back to the start corner
