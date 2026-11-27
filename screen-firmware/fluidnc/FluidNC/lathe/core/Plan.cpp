@@ -29,8 +29,11 @@ namespace lathe {
         if (!(depth_step_mm > 0)) {
             return "depth_step_mm must be greater than zero";
         }
-        if (depth_step_mm > 10.0) {
+        if (depth_step_mm > MAX_DEPTH_STEP_MM) {
             return "depth_step_mm must not be more than 10 mm";
+        }
+        if (!(switch_a_margin_mm >= 0) || switch_a_margin_mm > 10.0) {
+            return "switch_a_margin_mm must be from 0 to 10 mm";
         }
         if (!(cut_feed_mm_per_min > 0)) {
             return "cut_feed_mm_per_min must be greater than zero";

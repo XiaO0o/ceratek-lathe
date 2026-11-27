@@ -49,6 +49,14 @@ namespace lathe {
         virtual void   withdraw()                       = 0;
         // The operator went back to the main page: the session must end without doing more.
         virtual bool aborted() { return false; }
+        // A stop nobody planned: a switch touched where none should be (during the depth steps,
+        // the cut, the way back, a manual move), a failed homing. Planned switch touches
+        // (homing at B and C, Locate and the length measurement at A) are messages, not this.
+        // On the touchscreen: red, with the buzzer. A Ui without it shows it as a message.
+        virtual void warn(const std::string& text) { say("WARNING: " + text); }
+        // The operator stopped the machine (the main-page button, Stop during homing): the stop
+        // that follows is a message, not a warning.
+        virtual bool stopped_on_purpose() { return aborted(); }
         // The third axis (X, the tube) switch on the screen: does the tube turn during the cut?
         virtual bool rotation_on() { return true; }
     };
@@ -68,6 +76,9 @@ namespace lathe {
         Session(Machine& machine, const CutSettings& settings, Ui& ui) : machine(machine), settings(settings), ui(ui) {}
 
         CutResult run();
+        // The step per round the operator chose for this tube (or changed in Settings), for the
+        // screen to offer it again next time; 0 if the job ended before the step was asked.
+        double depth_step() const { return _step_chosen ? _step : 0; }
 
         Machine&    machine;
         CutSettings settings;
@@ -83,16 +94,24 @@ namespace lathe {
         void   cut();
         void   go_back();
         double z_now();
+        bool   step_ok(double step);  // says why not when it is not
         double _step      = 0;  // depth step per round, mm (the operator may change it)
+        bool   _step_chosen = false;  // the operator answered the step question in this job
         double _move_feed = 0;  // speed of the depth steps and the length measurement, mm/min
     };
 
     // Locating (the group's plan, 2026-11-24), separate from a tube job: home (switch B, then
     // switch C), travel along the tube to switch A to measure how far apart C and A are, then
     // go back to the zero point (bottom left): Z to 0, then Y to 0; reaching 0 ends it, and so
-    // does a switch touched on the way. Returns the C-to-A distance (mm).
+    // does a switch touched on the way (a warning). Returns the C-to-A distance (mm).
     // Throws Stopped or MachineError like the Machine calls it makes.
     double locate(Machine& machine, const CutSettings& settings, Ui& ui);
+
+    // " Pressed now: switch C." from a status report's Pn field (Y = B, Z = C, P = A), or "".
+    std::string switch_note(const Status& s);
+
+    // A stop, shown as a warning unless the operator made it (Ui::stopped_on_purpose).
+    void report_stop(Ui& ui, const std::string& text);
 
     // printf into a std::string
     std::string format(const char* fmt, ...);

@@ -56,8 +56,24 @@ namespace lathe {
         return s.mpos[2];
     }
 
-    // 1. Each round one step further toward the tube; OK keeps this depth.
+    bool Session::step_ok(double step) {
+        if (step >= CutSettings::MIN_DEPTH_STEP_MM && step <= CutSettings::MAX_DEPTH_STEP_MM) {
+            return true;
+        }
+        ui.say("The step must be from 0.01 to 10 mm.");
+        return false;
+    }
+
+    // 1. First the step per round for this tube (shown pre-filled with the one used last), then
+    //    each round one step further toward the tube; OK keeps this depth.
     void Session::find_depth() {
+        double step;
+        do {
+            step = ui.ask_value("Step per round toward the tube, mm (0.01 to 10)", _step, false);
+        } while (!step_ok(step));
+        _step        = step;
+        _step_chosen = true;
+        ui.say(format("Each round moves the tool %.3f mm further toward the tube.", _step));
         double depth = 0;
         while (true) {
             result.rounds++;
@@ -84,10 +100,13 @@ namespace lathe {
         int    i    = 0;
         while (i < 2) {
             try {
-                double v = i == 0 ? ui.ask_value("Step per round toward the tube, mm", step, false)
+                double v = i == 0 ? ui.ask_value("Step per round toward the tube, mm (0.01 to 10)", step, false)
                                   : ui.ask_value("Speed of the steps and of the length measurement, mm/min", feed, true);
-                if (!(v > 0) || (i == 0 && v > 10.0)) {
-                    ui.say(i == 0 ? "The step must be more than 0 and at most 10 mm." : "The speed must be greater than zero.");
+                if (i == 0 && !step_ok(v)) {
+                    continue;
+                }
+                if (i == 1 && !(v > 0)) {
+                    ui.say("The speed must be greater than zero.");
                     continue;
                 }
                 (i == 0 ? step : feed) = v;
@@ -102,7 +121,8 @@ namespace lathe {
     }
 
     // 2. Slowly along the tube toward switch A; OK fixes the length, Return starts it again,
-    //    switch A ends it there.
+    //    switch A ends it there. Switch A here is planned (a message, no warning); any other
+    //    stop is not, and ends the job like a stop anywhere else.
     void Session::find_length() {
         const double start  = z_now();
         result.start_z_mm   = start;
@@ -110,11 +130,13 @@ namespace lathe {
         std::string  travel = fixed(settings.jog_feed_mm_per_min, 1);
         while (true) {
             ui.say("Measuring the length: the tool moves slowly toward switch A.");
+            size_t mark = machine.link.unsolicited.size();  // alarms after this are this measurement's
             machine.jog_start('Z', a_z, _move_feed);
             ui.offer("OK: the length is this long. Return: not right, back to the start and measure again.");
             Choice c = Choice::None;
-            bool   at_a = false;
-            double z    = start;
+            bool   at_end  = false;  // switch A, or the farthest the measurement may go
+            bool   alarmed = false;
+            double z       = start;
             while (true) {
                 c = ui.poll_choice();
                 if (c != Choice::None) {
@@ -125,11 +147,12 @@ namespace lathe {
                     z = s.mpos[2];
                 }
                 if (s.alarmed()) {
-                    at_a = true;  // switch A (or another switch): the measurement ends there
+                    at_end  = true;  // a switch: below, A ends the measurement, any other is a stop
+                    alarmed = true;
                     break;
                 }
                 if (s.state == "Idle") {
-                    at_a = true;  // the farthest it may go: as if switch A were there
+                    at_end = true;  // the farthest it may go: as if switch A were there
                     break;
                 }
                 machine.pause(0.1);
@@ -142,13 +165,34 @@ namespace lathe {
                 machine.jog_cancel();
                 throw Quit {};
             }
-            if (at_a) {
-                result.length_mm = std::fabs(z - start);
-                ui.say(format("The length ends at switch A: %.1f mm.", result.length_mm));
-                Status s = machine.status();
-                if (s.alarmed()) {
-                    // A switch touched while moving is a stop: recover, and home so that the
-                    // positions are true again before cutting.
+            if (at_end) {
+                if (alarmed) {
+                    // FluidNC sets the alarm state a moment before it sends the ALARM line.
+                    Status s    = machine.status();
+                    int    code = machine.last_alarm(mark);
+                    for (int i = 0; code < 0 && i < 10; i++) {
+                        machine.pause(0.05);
+                        s    = machine.status();
+                        code = machine.last_alarm(mark);
+                    }
+                    // Alarm 18: switch A outside a probing move (probe_hard_limit). Without a
+                    // number, A still pressed (Pn:P) and neither B nor C tells the same.
+                    bool switch_a = code == 18 || (code < 0 && s.has_pin('P') && !s.has_pin('Y') && !s.has_pin('Z'));
+                    if (!switch_a) {
+                        machine.needs_homing = true;
+                        throw Stopped("The length measurement was stopped: " + machine.stop_reason(s, mark) + "." +
+                                      switch_note(s) + " Recover and home before continuing.");
+                    }
+                }
+                // The cut must stop before switch A, or it touches A again with the tool at depth.
+                double reach  = std::fabs(z - start);
+                double margin = std::min(settings.switch_a_margin_mm, reach);
+                result.length_mm = reach - margin;
+                ui.say(format("The length ends at switch A: %.1f mm. The cut stops %.1f mm before it: %.1f mm.", reach, margin,
+                              result.length_mm));
+                if (alarmed) {
+                    // Switch A stopped the jog: recover, and home so that the positions are true
+                    // again before cutting.
                     machine.recover();
                     machine.home();
                 }
@@ -214,17 +258,19 @@ namespace lathe {
         result.cut = true;
     }
 
-    // 4. Back to the start corner. Reaching 0 ends it; a switch touched on the way stops it,
-    //    which also counts as being back (the position is then found again by homing later).
+    // 4. Back to the start corner. Reaching 0 ends it. The way back stops 2 mm short of switches
+    //    B and C (their pull-off), so a switch touched on the way means lost steps: a warning.
+    //    The cut is done all the same, and the position is found again by homing later.
     void Session::go_back() {
         ui.say("Back to the start corner.");
         try {
             machine.run(return_gcode(settings));
-        } catch (const Stopped&) {
+        } catch (const Stopped& e) {
             if (ui.aborted()) {
                 throw Quit {};
             }
-            ui.say("Stopped at a switch on the way back. The position will be found again before the next move.");
+            report_stop(ui, std::string("On the way back to the start corner: ") + e.what() + switch_note(machine.status()) +
+                                " The cut was finished; the position will be found again before the next move.");
         }
     }
 
@@ -252,6 +298,13 @@ namespace lathe {
                 machine.home();
                 ui.say("At the start corner.");
                 return;
+            } catch (const Stopped& problem) {
+                // A failed homing (switch not found, still pressed, another switch pressed) is a
+                // warning; Stop during homing is the operator's and only a message.
+                report_stop(ui, problem.what() + switch_note(machine.status()));
+                if (!ui.confirm("Try again?")) {
+                    throw Quit {};
+                }
             } catch (const MachineError& problem) {
                 ui.say(problem.what());
                 if (!ui.confirm("Try again?")) {
@@ -280,16 +333,45 @@ namespace lathe {
         // until switch C is touched, wherever that is (2026-11-24: a plain move back went past
         // C when steps were lost, and switch C touched during a plain move is a hard-limit alarm).
         // Back to the zero point: Z to 0 (Y stays clear of switch B meanwhile), then Y to 0.
-        // Reaching 0 ends it; a switch touched on the way stops it, which also ends it.
+        // Reaching 0 ends it. 0 is 2 mm short of switches B and C (their pull-off), so a switch
+        // touched on the way means lost steps: a warning. The length is measured all the same.
         ui.say("Back to the zero point (bottom left).");
         try {
             machine.run({ "G1 Z0.000 F" + travel, "G1 Y0.000 F" + travel });
             ui.say("Located: at the zero point.");
-        } catch (const Stopped&) {
-            ui.say("Stopped at a switch on the way back: located, the position is found again before the next move.");
+        } catch (const Stopped& e) {
+            if (ui.stopped_on_purpose()) {
+                throw;  // the operator's stop: the caller says so
+            }
+            ui.warn(std::string("On the way back to the zero point: ") + e.what() + switch_note(machine.status()) +
+                    " The length was measured; the position is found again before the next move.");
             machine.recover();
         }
         return length;
+    }
+
+    std::string switch_note(const Status& s) {
+        std::string names;
+        auto        add = [&](char pin, const char* name) {
+            if (s.has_pin(pin)) {
+                names += names.empty() ? name : std::string(" and ") + name;
+            }
+        };
+        add('Y', "B");
+        add('Z', "C");
+        add('P', "A");
+        if (names.empty()) {
+            return "";
+        }
+        return std::string(" Pressed now: switch ") + names + ".";
+    }
+
+    void report_stop(Ui& ui, const std::string& text) {
+        if (ui.stopped_on_purpose()) {
+            ui.say(text);
+        } else {
+            ui.warn(text);
+        }
     }
 
 }  // namespace lathe

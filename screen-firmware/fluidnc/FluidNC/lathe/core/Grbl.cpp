@@ -12,7 +12,8 @@ namespace lathe {
             const char* text;
         };
 
-        // Alarm codes 1-9 are defined by Grbl 1.1. Higher numbers are firmware-specific.
+        // Alarm codes 1-9 are defined by Grbl 1.1. Higher numbers are firmware-specific: 10-18
+        // are FluidNC v4.1.1's (src/Alarm.h). On this lathe 1 is switch B or C and 18 is switch A.
         const CodeText ALARMS[] = {
             { 1, "hard limit triggered; position is lost, re-home" },
             { 2, "soft limit: target is outside the machine travel" },
@@ -23,6 +24,15 @@ namespace lathe {
             { 7, "homing fail: safety door opened during the cycle" },
             { 8, "homing fail: switch still triggered after pull-off" },
             { 9, "homing fail: switch not found within the search distance" },
+            { 10, "spindle control fault" },
+            { 11, "an input was already active at start-up" },
+            { 12, "homing fail: switch at the wrong end" },
+            { 13, "stop switch (e-stop) pressed" },
+            { 14, "not homed" },
+            { 15, "start-up" },
+            { 16, "I/O expander reset" },
+            { 17, "G-code error" },
+            { 18, "switch A (probe input) touched outside a probing move" },
         };
 
         const CodeText ERRORS[] = {

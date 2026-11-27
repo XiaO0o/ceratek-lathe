@@ -29,6 +29,12 @@ namespace lathe {
         double z_search_mm;          // farthest the length measurement may go (Z max travel)
         double tube_rpm;             // turning speed of the tube during the cut
         bool   rotate = true;        // the third axis (X, the tube) turns during the cut
+        // A length that ends at switch A is cut this much shorter, so the cut stops before A.
+        double switch_a_margin_mm = 1.0;
+
+        // The step per round the operator may choose (each new tube asks for it).
+        static constexpr double MIN_DEPTH_STEP_MM = 0.01;
+        static constexpr double MAX_DEPTH_STEP_MM = 10.0;
 
         // Empty when the settings make sense, else the reason.
         std::string problem() const;

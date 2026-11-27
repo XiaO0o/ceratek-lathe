@@ -55,6 +55,13 @@ namespace lathe {
         void pause(double s) { sleep(s); }  // wait a little between status looks
         void resume() { link.realtime(RT_CYCLE_START); }
 
+        // The number of the newest "ALARM:n" the controller sent after `mark` (a position in
+        // link.unsolicited, see LineLog::size()), or -1 if it sent none.
+        int last_alarm(size_t mark = 0) const;
+        // Why the controller stopped, in words ("alarm 1: hard limit ...", "the stop switch was
+        // pressed"), from the status and the newest alarm after `mark`.
+        std::string stop_reason(const Status& s, size_t mark = 0) const;
+
         GrblLink& link;
         bool      needs_homing = true;  // until a homing cycle has finished in this session
 

@@ -148,6 +148,7 @@ namespace lathe {
         int32_t _y_toward_tube       = 1;
         int32_t _z_cut_direction     = 1;
         float   _jog_feed_mm_per_min = 120.0f;
+        float   _switch_a_margin_mm  = 1.0f;
 
     private:
         ByteQueue _inbox { 4096 };

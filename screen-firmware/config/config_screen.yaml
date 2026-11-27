@@ -44,7 +44,7 @@ axes:
 
   x:                                     # tube rotation
     steps_per_mm: 3200.000               # 200 steps x 16 microsteps = 1 revolution per unit (T4)
-    max_rate_mm_per_min: 120.000         # BENCH: 120 rev/min until T6 has measured the real limit
+    max_rate_mm_per_min: 200.000         # 200 rev/min (2026-11-26). T6 on the stand-in motor (12 V, no load) was smooth up to 200 and lost steps from 300: watch for lost steps once the tube is in
     acceleration_mm_per_sec2: 2.000      # BENCH: 2 rev/s^2
     max_travel_mm: 1000000.000           # unused: this axis turns without end
     soft_limits: false
@@ -57,7 +57,7 @@ axes:
 
   y:                                     # tool toward / away from the tube; switch B at the start end
     steps_per_mm: 400.000                # 3200 steps per turn / 8 mm lead screw
-    max_rate_mm_per_min: 600.000         # BENCH
+    max_rate_mm_per_min: 960.000         # 120 motor rev/min x 8 mm lead (2026-11-26); the moves themselves are slower (jog_feed_mm_per_min, homing)
     acceleration_mm_per_sec2: 50.000     # BENCH
     max_travel_mm: 100.000               # BENCH: set from the real travel on the machine
     soft_limits: true
@@ -80,7 +80,7 @@ axes:
 
   z:                                     # along the tube; switch C at the start end, switch A (probe) at the far end
     steps_per_mm: 400.000
-    max_rate_mm_per_min: 600.000         # BENCH
+    max_rate_mm_per_min: 960.000         # 120 motor rev/min x 8 mm lead (2026-11-26), as Y
     acceleration_mm_per_sec2: 50.000     # BENCH
     max_travel_mm: 250.000               # BENCH: set from the real travel on the machine
     soft_limits: true
@@ -149,7 +149,13 @@ lathe_screen:
   lcd_reset_pin: gpio.27
   touch_cs_pin: gpio.26
   backlight_pin: gpio.5:low      # seen 2026-11-21: the screen lights with this setting (as MKS firmware does for board 002)
-  beeper_pin: NO_PIN             # I2SO.7 drives the buzzer; left off until checked
+  # The screen's buzzer (I2SO.7 on the DLC32 V2.1 drawing; the factory firmware's touch beep
+  # worked on our V2.2 board). It sounds only for a WARNING: a stop nobody planned, such as a
+  # switch touched during a cut. Planned switch touches (homing at B and C, Locate and the length
+  # measurement at A) and button presses are silent. Check once: press switch B by hand while
+  # the machine is Idle after homing; the screen must show a red WARNING and beep 3 times. If it
+  # beeps without end, write I2SO.7:low; if it never beeps, write NO_PIN and tell the group.
+  beeper_pin: I2SO.7
   rotation: 1                    # 0-3: turn the picture to match how the screen is mounted
   lcd_spi_hz: 40000000           # lower to 20000000 if the picture shows specks or wrong colours
   touch_spi_hz: 2500000
@@ -162,9 +168,17 @@ lathe_screen:
   allow_motion: true             # 2026-11-21: on after the bench tests S1-S3 passed; false keeps the screen from moving anything
 
   # The group's plan (2026-11-24). Values marked GROUP are to be set by the group.
-  depth_step_mm: 1.0             # GROUP: each round moves the tool this much further toward the tube
+  # GROUP: each round moves the tool this much further toward the tube. Each new tube starts
+  # by asking for the step (0.01 to 10 mm); this is only the first value shown, and from then on
+  # the screen shows the step used last (kept in flash).
+  depth_step_mm: 1.0
   cut_feed_mm_per_min: 60.0      # GROUP: speed of the depth steps, the length measurement and the cut
-  tube_rpm: 60.0                 # GROUP: turning speed of the tube during the cut (X axis, added later)
+  # Turning speed of the tube during the cut (X axis), at most X's max_rate above. Once a speed
+  # has been saved on the Speeds page, the screen uses that one instead.
+  tube_rpm: 200.0
+  # When the length measurement ends at switch A, the cut stops this much short of where A was
+  # touched, so that the cut does not touch A again (that would be a stop with the tool at depth).
+  switch_a_margin_mm: 1.0
   y_toward_tube: 1
   z_cut_direction: 1
   jog_feed_mm_per_min: 120.0     # set-up moves and the way back to the start corner

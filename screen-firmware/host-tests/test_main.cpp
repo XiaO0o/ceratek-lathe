@@ -127,7 +127,9 @@ TEST(test_lines_that_are_not_a_valid_report_are_rejected) {
 TEST(test_codes_are_described_and_unknown_ones_fall_back_to_the_number) {
     CHECK(contains(describe_alarm(1), "hard limit"));
     CHECK(contains(describe_alarm(9), "switch not found"));
-    CHECK_EQ(describe_alarm(13), std::string("firmware-specific alarm 13"));
+    CHECK(contains(describe_alarm(13), "e-stop"));       // FluidNC's own numbers (src/Alarm.h)
+    CHECK(contains(describe_alarm(18), "switch A"));
+    CHECK_EQ(describe_alarm(99), std::string("firmware-specific alarm 99"));
     CHECK(contains(describe_error(9), "alarm or jog"));
     CHECK_EQ(describe_error(152), std::string("firmware-specific error 152"));
     CHECK_EQ(describe_pin('Y'), std::string("Y limit input"));
@@ -396,6 +398,19 @@ class Script : public Ui {
 public:
     explicit Script(std::vector<std::string> answers) : answers(std::move(answers)) {}
     void        say(const std::string& text) override { said.push_back(text); }
+    // warnings are kept apart from messages: the screen beeps for these only
+    void        warn(const std::string& text) override { warned.push_back(text); }
+    bool        on_purpose = false;  // as after the main-page button or Stop during homing
+    bool        stopped_on_purpose() override { return on_purpose; }
+    std::vector<std::string> warned;
+    bool        warned_of(const std::string& phrase) const {
+        for (auto& l : warned) {
+            if (contains(l, phrase)) {
+                return true;
+            }
+        }
+        return false;
+    }
     bool        rotate = true;  // the third axis switch on the screen
     bool        rotation_on() override { return rotate; }
     std::string ask(const std::string& prompt) override { return next(prompt); }
@@ -510,8 +525,8 @@ TEST(test_cut_moves_turn_the_tube_while_cutting_the_length_at_the_depth) {
 }
 
 TEST(test_each_round_steps_further_until_ok_then_the_length_then_the_cut_then_back) {
-    // home; depth: Return, Return, OK; length: nothing pressed twice, then OK
-    SessionRig r({ "y", "return", "return", "ok", "60", "60", "ok" }, { "wait", "wait", "ok" });
+    // home; step 1 mm; depth: Return, Return, OK; length: nothing pressed twice, then OK
+    SessionRig r({ "y", "1", "return", "return", "ok", "60", "60", "ok" }, { "wait", "wait", "ok" });
     CutResult  res = r.session.run();
     CHECK(r.board.homed);
     CHECK_EQ(res.rounds, 3);
@@ -529,7 +544,7 @@ TEST(test_each_round_steps_further_until_ok_then_the_length_then_the_cut_then_ba
 }
 
 TEST(test_return_during_the_length_goes_back_to_its_start_and_measures_again) {
-    SessionRig r({ "y", "ok", "60", "60", "ok" }, { "wait", "return", "wait", "ok" });
+    SessionRig r({ "y", "1", "ok", "60", "60", "ok" }, { "wait", "return", "wait", "ok" });
     CutResult  res = r.session.run();
     CHECK_EQ(r.lines_with("$J=G90").size(), size_t(2));        // measured twice
     CHECK(!r.lines_with("G1 Z0.000 F120.0").empty());          // back to the start in between
@@ -540,7 +555,7 @@ TEST(test_the_length_measurement_stops_at_the_far_end_it_is_given) {
     // after Locate the screen passes the measured C-to-A length as the farthest point
     CutSettings located = SETTINGS;
     located.z_search_mm = 30;
-    SessionRig r({ "y", "ok", "60", "60", "ok" }, { "wait", "wait", "wait", "wait", "wait" });
+    SessionRig r({ "y", "1", "ok", "60", "60", "ok" }, { "wait", "wait", "wait", "wait", "wait" });
     Session    s(r.machine, located, r.ui);
     r.ui.on_poll_choice = [&](const std::string&) {
         if (r.board.state == "Jog") {
@@ -553,17 +568,19 @@ TEST(test_the_length_measurement_stops_at_the_far_end_it_is_given) {
     };
     CutResult res = s.run();
     CHECK(contains(r.lines_with("$J=G90").at(0), "Z30.0000"));
-    CHECK_NEAR(res.length_mm, 30.0, 1e-9);
+    CHECK_NEAR(res.length_mm, 29.0, 1e-9);  // the far end counts as switch A: the cut stops 1 mm short
+    CHECK(contains(r.lines_with("G1 X").at(0), "Z29.000"));
+    CHECK(r.ui.warned.empty());
 }
 
 TEST(test_the_machine_waits_for_the_cutting_values_before_cutting) {
     // length OK, then: speed 120, feed 30, Return (change), speed 90, feed 30, OK
-    SessionRig r({ "y", "ok", "120", "30", "return", "90", "30", "ok" }, { "ok" });
+    SessionRig r({ "y", "1", "ok", "120", "30", "return", "90", "30", "ok" }, { "ok" });
     CutResult  res = r.session.run();
     CHECK_NEAR(res.tube_rpm, 90.0, 1e-9);
     CHECK_NEAR(res.cut_feed_mm_per_min, 30.0, 1e-9);
-    CHECK_EQ(r.ui.initials.at(0), 60.0);  // the speed starts from config.yaml's value
-    CHECK_EQ(r.ui.initials.at(2), 120.0); // asked again: shows what was typed
+    CHECK_EQ(r.ui.initials.at(1), 60.0);  // the speed starts from config.yaml's value (0 is the step)
+    CHECK_EQ(r.ui.initials.at(3), 120.0); // asked again: shows what was typed
     // 10 mm at 30 mm/min = 1/3 min, at 90 rev/min = 30 turns
     CHECK(contains(r.lines_with("G1 X").at(0), "X30.000 Z10.000"));
 }
@@ -590,7 +607,7 @@ TEST(test_with_the_third_axis_off_the_cut_runs_without_turning_the_tube) {
     // a shallow depth backs off half of it, never to 0
     CHECK_EQ(cut_gcode(1.0, 0.0, 60.0, off).at(1), std::string("G1 Y0.500 F60.0"));
 
-    SessionRig r({ "y", "ok", "60", "60", "ok" }, { "ok" });
+    SessionRig r({ "y", "1", "ok", "60", "60", "ok" }, { "ok" });
     r.ui.rotate   = false;
     CutResult res = r.session.run();
     CHECK(res.cut);
@@ -599,7 +616,7 @@ TEST(test_with_the_third_axis_off_the_cut_runs_without_turning_the_tube) {
 
 TEST(test_settings_on_the_depth_question_change_the_step_and_the_speed) {
     // round 1 (1 mm): Settings -> step 0.5, speed 30; then Return twice, OK: 1 + 0.5 + 0.5 = 2 mm
-    SessionRig r({ "y", "settings", "0.5", "30", "return", "return", "ok", "60", "60", "ok" }, { "ok" });
+    SessionRig r({ "y", "1", "settings", "0.5", "30", "return", "return", "ok", "60", "60", "ok" }, { "ok" });
     CutResult  res = r.session.run();
     CHECK_EQ(res.rounds, 3);
     CHECK_NEAR(res.depth_mm, 2.0, 1e-9);
@@ -610,25 +627,90 @@ TEST(test_settings_on_the_depth_question_change_the_step_and_the_speed) {
 }
 
 TEST(test_switch_a_ends_the_length_there_and_the_cut_follows) {
-    SessionRig r({ "y", "ok", "60", "60", "ok" }, { "wait", "wait", "wait" });
+    SessionRig r({ "y", "1", "ok", "60", "60", "ok" }, { "wait", "wait", "wait" });
     r.ui.on_poll_choice = [&](const std::string&) {
         if (r.board.state == "Jog") {
             r.board.pos[2] += 10;
-            if (r.board.pos[2] >= 20) {  // switch A: the controller stops with an alarm
+            if (r.board.pos[2] >= 20) {  // switch A: FluidNC stops with alarm 18 (probe_hard_limit)
                 r.board.state = "Alarm";
-                r.board.say("ALARM:7");
+                r.board.say("ALARM:18");
             }
         }
     };
     CutResult res = r.session.run();
-    CHECK_NEAR(res.length_mm, 20.0, 1e-9);
-    CHECK(r.ui.heard("The length ends at switch A: 20.0 mm."));
+    CHECK_NEAR(res.length_mm, 19.0, 1e-9);  // 1 mm short of where A was touched
+    CHECK(r.ui.heard("The length ends at switch A: 20.0 mm. The cut stops 1.0 mm before it: 19.0 mm."));
     CHECK_EQ(r.board.homings.size(), size_t(2));  // homed again before cutting
     CHECK(res.cut);
+    CHECK(contains(r.lines_with("G1 X").at(0), "Z19.000"));
+    CHECK(r.ui.warned.empty());  // switch A here is planned: no warning, no beep
+}
+
+TEST(test_without_an_alarm_number_switch_a_is_known_by_its_input) {
+    SessionRig r({ "y", "1", "ok", "60", "60", "ok" }, { "wait", "wait", "wait" });
+    r.ui.on_poll_choice = [&](const std::string&) {
+        if (r.board.state == "Jog") {
+            r.board.pos[2] += 10;
+            if (r.board.pos[2] >= 20) {
+                r.board.state = "Alarm";  // the ALARM line was lost; A is still pressed
+                r.board.press('P');
+            }
+        }
+    };
+    r.board.on_poll = [&](int) {
+        if (r.board.homings.size() == 2) {
+            r.board.release('P');  // homing moved the tool off switch A
+        }
+    };
+    CutResult res = r.session.run();
+    CHECK(res.cut);
+    CHECK(r.ui.warned.empty());
+}
+
+TEST(test_another_switch_during_the_length_is_a_stop_not_the_end_of_the_length) {
+    SessionRig r({ "y", "1", "ok", "60", "60", "ok" }, { "wait", "wait", "wait" });
+    r.ui.on_poll_choice = [&](const std::string&) {
+        if (r.board.state == "Jog") {
+            r.board.pos[2] += 10;
+            if (r.board.pos[2] >= 20) {  // switch C (hard limit), not A
+                r.board.press('Z');
+                r.board.alarm(1);
+            }
+        }
+    };
+    std::string what = expect_throw<Stopped>([&] { r.session.run(); });
+    CHECK(contains(what, "The length measurement was stopped: alarm 1"));
+    CHECK(contains(what, "Pressed now: switch C."));
+    CHECK(r.lines_with("G1 X").empty());  // nothing was cut
+    CHECK(r.machine.needs_homing);
+}
+
+TEST(test_each_tube_starts_by_asking_the_step_shown_with_the_one_used_last) {
+    // the step offered first is config.yaml's (1 mm); 0 and 20 are refused; 0.25 is taken
+    SessionRig r({ "y", "0", "20", "0.25", "return", "ok", "60", "60", "ok" }, { "ok" });
+    CutResult  res = r.session.run();
+    CHECK_EQ(r.ui.initials.at(0), 1.0);
+    CHECK(contains(r.ui.asked.at(1), "Step per round toward the tube"));
+    CHECK(r.ui.heard("The step must be from 0.01 to 10 mm."));
+    CHECK_EQ(res.rounds, 2);
+    CHECK_NEAR(res.depth_mm, 0.5, 1e-9);
+    auto steps = r.lines_with("G1 Y");
+    CHECK(contains(steps.at(1), "G1 Y0.250"));
+    CHECK(contains(steps.at(2), "G1 Y0.500"));
+    CHECK_NEAR(r.session.depth_step(), 0.25, 1e-12);  // what the screen keeps for the next tube
+
+    // the next tube: the screen passes the step used last as the first value shown
+    CutSettings next = SETTINGS;
+    next.depth_step_mm = r.session.depth_step();
+    SessionRig r2({ "0.25", "ok", "60", "60", "ok" }, { "ok" });
+    r2.machine.home();
+    Session s2(r2.machine, next, r2.ui);
+    s2.run();
+    CHECK_EQ(r2.ui.initials.at(0), 0.25);
 }
 
 TEST(test_ending_the_session_during_the_length_stops_the_tool) {
-    SessionRig r({ "y", "ok" }, { "wait", "end" });
+    SessionRig r({ "y", "1", "ok" }, { "wait", "end" });
     bool       quit = false;
     try {
         r.session.run();
@@ -640,11 +722,12 @@ TEST(test_ending_the_session_during_the_length_stops_the_tool) {
     CHECK(r.lines_with("G1 X").empty());           // nothing was cut
 }
 
-TEST(test_a_switch_on_the_way_back_ends_the_session_as_back) {
-    SessionRig r({ "y", "ok", "60", "60", "ok" }, { "ok" });
+TEST(test_a_switch_on_the_way_back_is_a_warning_and_the_session_ends_as_back) {
+    SessionRig r({ "y", "1", "ok", "60", "60", "ok" }, { "ok" });
     r.board.intercept = [&](const std::string& line) {
         if (line == "G1 Z0.000 F120.0" && !r.lines_with("G1 X").empty()) {
             r.board.state = "Alarm";  // switch C touched before Z reached 0
+            r.board.press('Z');
             r.board.say("ALARM:1");
             return true;
         }
@@ -652,7 +735,62 @@ TEST(test_a_switch_on_the_way_back_ends_the_session_as_back) {
     };
     CutResult res = r.session.run();
     CHECK(res.cut);
-    CHECK(r.ui.heard("Stopped at a switch on the way back."));
+    CHECK_EQ(r.ui.warned.size(), size_t(1));
+    CHECK(r.ui.warned_of("On the way back to the start corner"));
+    CHECK(r.ui.warned_of("alarm 1"));
+    CHECK(r.ui.warned_of("Pressed now: switch C."));
+}
+
+TEST(test_a_stop_the_operator_made_is_a_message_not_a_warning) {
+    SessionRig r({ "y", "1", "ok", "60", "60", "ok" }, { "ok" });
+    r.ui.on_purpose   = true;  // e.g. Stop pressed on the status bar
+    r.board.intercept = [&](const std::string& line) {
+        if (line == "G1 Z0.000 F120.0" && !r.lines_with("G1 X").empty()) {
+            r.board.alarm(3);
+            return true;
+        }
+        return false;
+    };
+    r.session.run();
+    CHECK(r.ui.warned.empty());
+    CHECK(r.ui.heard("On the way back to the start corner"));
+}
+
+TEST(test_a_failed_homing_is_a_warning_and_may_be_tried_again) {
+    // homing fails (switch not found), the operator declines to try again
+    SessionRig r({ "y", "n" });
+    r.board.homing_fails = true;
+    bool quit            = false;
+    try {
+        r.session.run();
+    } catch (const Quit&) {
+        quit = true;
+    }
+    CHECK(quit);
+    CHECK(r.ui.warned_of("alarm 9"));
+    CHECK(contains(r.ui.asked.back(), "Try again?"));
+}
+
+TEST(test_the_pressed_switches_are_named_from_the_inputs) {
+    Status s;
+    CHECK_EQ(switch_note(s), std::string(""));
+    s.pins = "Z";
+    CHECK_EQ(switch_note(s), std::string(" Pressed now: switch C."));
+    s.pins = "PY";
+    CHECK_EQ(switch_note(s), std::string(" Pressed now: switch B and A."));
+}
+
+TEST(test_the_newest_alarm_after_a_mark_is_found) {
+    Rig r;
+    r.lathe.status();
+    size_t mark = r.lathe.link.unsolicited.size();
+    CHECK_EQ(r.lathe.last_alarm(mark), -1);
+    r.board.alarm(1);
+    r.board.say("ALARM:18");
+    r.lathe.status();
+    CHECK_EQ(r.lathe.last_alarm(mark), 18);
+    CHECK(contains(r.lathe.stop_reason(r.lathe.status(), mark), "alarm 18: switch A"));
+    CHECK_EQ(r.lathe.last_alarm(r.lathe.link.unsolicited.size()), -1);  // nothing newer
 }
 
 TEST(test_declining_to_home_ends_the_session_before_anything_moves) {
@@ -668,7 +806,7 @@ TEST(test_declining_to_home_ends_the_session_before_anything_moves) {
 }
 
 TEST(test_a_machine_homed_by_locate_is_not_homed_again_by_the_job) {
-    SessionRig r({ "ok", "60", "60", "ok" }, { "ok" });
+    SessionRig r({ "1", "ok", "60", "60", "ok" }, { "ok" });
     r.machine.home();
     r.session.run();
     for (auto& p : r.ui.asked) {
@@ -691,6 +829,9 @@ TEST(test_settings_that_make_no_sense_are_refused) {
     s = SETTINGS;
     s.tube_rpm = 0;
     CHECK(!s.problem().empty());
+    s = SETTINGS;
+    s.switch_a_margin_mm = -1;
+    CHECK(!s.problem().empty());
 }
 
 TEST(test_locating_homes_measures_c_to_a_and_goes_back_to_the_zero_point) {
@@ -709,6 +850,23 @@ TEST(test_locating_homes_measures_c_to_a_and_goes_back_to_the_zero_point) {
     CHECK_NEAR(r.board.pos[2], 0.0, 1e-9);
     CHECK(!r.machine.needs_homing);
     CHECK(r.ui.heard("Switch A is 180.0 mm from switch C."));
+}
+
+TEST(test_a_switch_on_the_way_back_from_locating_is_a_warning_and_the_length_is_kept) {
+    SessionRig r({});
+    r.board.intercept = [&](const std::string& line) {
+        if (line == "G1 Z0.000 F120.0") {
+            r.board.press('Z');  // switch C touched before Z reached 0: steps were lost
+            r.board.alarm(1);
+            return true;
+        }
+        return false;
+    };
+    double length = locate(r.machine, SETTINGS, r.ui);
+    CHECK_NEAR(length, 180.0, 1e-9);
+    CHECK(r.ui.warned_of("On the way back to the zero point"));
+    CHECK(r.ui.warned_of("Pressed now: switch C."));
+    CHECK(r.machine.needs_homing);
 }
 
 TEST(test_locating_stops_with_an_alarm_when_switch_a_is_never_touched) {

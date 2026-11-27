@@ -29,6 +29,7 @@ namespace lathe {
         constexpr uint16_t CYAN       = 0x07FF;
         constexpr uint16_t YELLOW     = 0xFFE0;
         constexpr uint16_t RED        = 0xF800;
+        constexpr uint16_t DIM_RED    = 0xA000;  // older warnings in the message list
         constexpr uint16_t DARK_RED   = 0x6000;
         constexpr uint16_t BLUE_SEL   = 0x001F;
 
@@ -46,6 +47,13 @@ namespace lathe {
         const char* const MANUAL_STEP_NAMES[4] = { "0.1", "1", "5", "10" };
 
         constexpr size_t LOG_KEEP = 40;
+
+        // A warning: a message that starts with this is drawn red, and the buzzer sounds
+        // WARNING_BEEPS times. Nothing else sounds (no click on the buttons).
+        const char* const WARNING_PREFIX = "WARNING: ";
+        constexpr int     WARNING_BEEPS  = 3;
+        constexpr int     BEEP_ON_MS     = 200;
+        constexpr int     BEEP_OFF_MS    = 150;
 
         const char* TOUCH_HELP_PYTHON = "Bring the tool tip to the start of the cut, just touching the tube. Type";
         const char* TOUCH_HELP_SCREEN =
@@ -116,6 +124,9 @@ namespace lathe {
             a    = _answer;
             quit = _quit;
             _ask = Ask::None;
+            // The operator has seen what an own stop (Stop during homing) did: a stop after
+            // this answer, as in a homing tried again, is a new one.
+            _operator_stop = false;
             _version++;
         }
         if (quit) {
@@ -198,6 +209,18 @@ namespace lathe {
         return _abort;
     }
 
+    void TouchUi::warn(const std::string& text) {
+        say(WARNING_PREFIX + text);
+        Lock l(_mutex);
+        _beep_request = WARNING_BEEPS;
+        _stop_handled = true;  // the alarm now showing has had its warning
+    }
+
+    bool TouchUi::stopped_on_purpose() {
+        Lock l(_mutex);
+        return _abort || _operator_stop;
+    }
+
     void TouchUi::withdraw() {
         Lock l(_mutex);
         _offered      = false;
@@ -225,10 +248,36 @@ namespace lathe {
             if (nvs_get_u32(h, "move_feed_x10", &v) == ESP_OK && v > 0) {
                 feed = v / 10.0;
             }
+            if (nvs_get_u32(h, "depth_step_um", &v) == ESP_OK) {
+                double step = v / 1000.0;
+                if (step >= CutSettings::MIN_DEPTH_STEP_MM && step <= CutSettings::MAX_DEPTH_STEP_MM) {
+                    _depth_step = step;
+                }
+            }
             nvs_close(h);
         }
         _tube_rpm  = rpm;
         _move_feed = feed;
+    }
+
+    // The step per round of the job that just ended, kept in flash so the next tube offers it
+    // first. Called with nothing moving (flash writes pause the processor's cache).
+    void TouchUi::remember_depth_step(double step) {
+        if (!(step >= CutSettings::MIN_DEPTH_STEP_MM && step <= CutSettings::MAX_DEPTH_STEP_MM) ||
+            std::fabs(step - _depth_step) < 1e-9) {
+            return;
+        }
+        _depth_step = step;
+        if (machine_moving()) {
+            return;  // kept until power-off only
+        }
+        nvs_handle_t h;
+        if (nvs_open(SPEED_NS, NVS_READWRITE, &h) != ESP_OK) {
+            return;
+        }
+        nvs_set_u32(h, "depth_step_um", uint32_t(step * 1000 + 0.5));
+        nvs_commit(h);
+        nvs_close(h);
     }
 
     void TouchUi::save_speeds() {
@@ -242,11 +291,14 @@ namespace lathe {
         nvs_close(h);
     }
 
-    // config.yaml's settings with the speeds of the Speeds page.
+    // config.yaml's settings with the speeds of the Speeds page and the step used last.
     CutSettings TouchUi::settings_now() {
         CutSettings cfg         = _owner.cut_settings();
         cfg.tube_rpm            = _tube_rpm;
         cfg.jog_feed_mm_per_min = _move_feed;
+        if (_depth_step > 0) {
+            cfg.depth_step_mm = _depth_step;
+        }
         return cfg;
     }
 
@@ -306,9 +358,37 @@ namespace lathe {
         // Nothing moves; the next move enables the motors again.
         auto release_motors = [&]() { _owner.release_motors(); };
 
+        // A stop that reached the screen: a WARNING (red, three beeps) unless the operator made
+        // it. The switches pressed now are named, unless the text already does.
+        auto tell_stop = [&](const std::string& text) {
+            std::string note;
+            if (text.find("Pressed now") == std::string::npos) {
+                try {
+                    note = switch_note(machine.status());
+                } catch (const std::exception&) {
+                }
+            }
+            report_stop(*this, text + note);
+        };
+        // An alarm still showing when an operation ends has been dealt with here: the idle
+        // watch on the screen task must not warn about it a second time.
+        auto mark_stop_handled = [&]() {
+            try {
+                if (machine.status().alarmed()) {
+                    Lock l(_mutex);
+                    _stop_handled = true;
+                }
+            } catch (const std::exception&) {
+            }
+        };
+
         while (true) {
             Command c;
             xQueueReceive(_commands, &c, portMAX_DELAY);
+            {
+                Lock l(_mutex);
+                _operator_stop = false;  // a new operation: an earlier own stop no longer counts
+            }
             if (!_owner.motion_allowed()) {
                 Lock l(_mutex);  // the buttons are greyed out too; this is the second lock
                 _busy = false;
@@ -354,9 +434,12 @@ namespace lathe {
                         machine.spin(c.feed, c.distance < 0 ? -1 : 1);
                         say(format("X test: turning %s at %.0f rev/min. Stop ends it.", c.distance < 0 ? "backward" : "forward", c.feed));
                     }
+                } catch (const Stopped& e) {
+                    tell_stop(std::string("X test: ") + e.what());
                 } catch (const std::exception& e) {
                     say(std::string("X test: ") + e.what());
                 }
+                mark_stop_handled();
                 release_motors();
                 Lock l(_mutex);
                 _busy = false;
@@ -418,26 +501,31 @@ namespace lathe {
                     _version++;
                 }
                 say("New tube. Follow the questions.");
-                try {
-                    // After Locate, switch A is where it was measured: the length measurement
-                    // goes no farther than that.
-                    CutSettings cfg = settings_now();
-                    {
-                        Lock l(_mutex);
-                        if (_located && _z_length > 0) {
-                            cfg.z_search_mm = _z_length;
-                        }
+                // After Locate, switch A is where it was measured: the length measurement goes
+                // no farther than that. The step per round offered first is the one used last.
+                CutSettings cfg = settings_now();
+                {
+                    Lock l(_mutex);
+                    if (_located && _z_length > 0) {
+                        cfg.z_search_mm = _z_length;
                     }
-                    Session session(machine, cfg, *this);
+                }
+                Session session(machine, cfg, *this);
+                try {
                     session.run();
                     say("Session finished.");
                 } catch (const Quit&) {
                     say("Session ended by the operator.");
+                } catch (const Stopped& e) {
+                    // planned switch touches never get here: only stops nobody planned (or the operator's)
+                    tell_stop(std::string("Session stopped: ") + e.what());
                 } catch (const std::exception& e) {
                     say(std::string("Session stopped: ") + e.what());
                 } catch (...) {
                     say("Session stopped by an unexpected error.");
                 }
+                mark_stop_handled();
+                remember_depth_step(session.depth_step());
                 release_motors();
                 {
                     Lock l(_mutex);
@@ -525,9 +613,13 @@ namespace lathe {
                     default:
                         break;
                 }
+            } catch (const Stopped& e) {
+                // a switch during a manual move, a failed homing or Locate (not Stop or Main)
+                tell_stop(e.what());
             } catch (const std::exception& e) {
                 say(e.what());
             }
+            mark_stop_handled();
             release_motors();
             {
                 Lock l(_mutex);
@@ -662,6 +754,8 @@ namespace lathe {
             }
 
             draw_status_bar(false);
+            watch_idle_stops();
+            update_beeper();
             uint32_t version;
             {
                 Lock l(_mutex);
@@ -684,6 +778,10 @@ namespace lathe {
             if (_xt_stop_check && int32_t(xTaskGetTickCount() - _xt_stop_check) >= 0) {
                 _xt_stop_check = 0;
                 if (machine_moving()) {
+                    {
+                        Lock l(_mutex);
+                        _operator_stop = true;  // this reset is the operator's Stop: no warning
+                    }
                     uint8_t b = RT_SOFT_RESET;
                     _owner.outbox().push(&b, 1);
                     say("X test: X did not stop, so the controller was reset. Press Locate before cutting.");
@@ -764,7 +862,8 @@ namespace lathe {
         return n;
     }
 
-    // The newest messages that fit, oldest at the top. The newest message is white, older grey.
+    // The newest messages that fit, oldest at the top. The newest message is white, older grey;
+    // a warning is red (older warnings a darker red).
     void TouchUi::draw_log(int x, int y, int w, int h) {
         std::deque<std::string> log;
         {
@@ -779,15 +878,17 @@ namespace lathe {
         struct Line {
             std::string text;
             bool        newest;
+            bool        warning;
         };
         std::vector<Line> lines;  // built newest first
         bool              newest = true;
         for (auto it = log.rbegin(); it != log.rend() && int(lines.size()) < fit; ++it) {
+            bool warning = it->rfind(WARNING_PREFIX, 0) == 0;
             auto wrapped = wrap(*it, w);
             for (auto r = wrapped.rbegin(); r != wrapped.rend(); ++r) {
-                lines.push_back({ *r, newest });
+                lines.push_back({ *r, newest, warning });
             }
-            lines.push_back({ "", false });  // a little space between messages
+            lines.push_back({ "", false, false });  // a little space between messages
             newest = false;
         }
         while (int(lines.size()) > fit) {
@@ -795,7 +896,8 @@ namespace lathe {
         }
         int row = 0;
         for (auto it = lines.rbegin(); it != lines.rend(); ++it, ++row) {
-            _lcd.setTextColor(it->newest ? WHITE : GREY, BLACK);
+            uint16_t colour = it->warning ? (it->newest ? RED : DIM_RED) : (it->newest ? WHITE : GREY);
+            _lcd.setTextColor(colour, BLACK);
             _lcd.drawString(it->text.c_str(), x, y + row * line_h);
         }
         _lcd.setTextColor(WHITE, BLACK);
@@ -1451,12 +1553,73 @@ namespace lathe {
 
     // ------------------------------------------------------------------ touches
 
-    void TouchUi::beep() {
-        if (_owner._beeper.defined()) {
-            _owner._beeper.write(true);
-            vTaskDelay(pdMS_TO_TICKS(20));
-            _owner._beeper.write(false);
+    // The buzzer, from the screen task only: warn() asks for beeps; this plays them a step at a
+    // time (on BEEP_ON_MS, off BEEP_OFF_MS), so neither task waits for the sound.
+    void TouchUi::update_beeper() {
+        int request;
+        {
+            Lock l(_mutex);
+            request       = _beep_request;
+            _beep_request = 0;
         }
+        if (!_owner._beeper.defined()) {
+            return;
+        }
+        if (request > _beeps_left) {
+            _beeps_left = request;  // a new warning: three beeps (again), never piling up
+        }
+        if (!_beep_on && _beeps_left == 0) {
+            return;
+        }
+        TickType_t now = xTaskGetTickCount();
+        if (int32_t(now - _beep_next) < 0) {
+            return;
+        }
+        if (_beep_on) {
+            _owner._beeper.write(false);
+            _beep_on   = false;
+            _beep_next = now + pdMS_TO_TICKS(BEEP_OFF_MS);
+        } else {
+            _owner._beeper.write(true);
+            _beep_on   = true;
+            _beeps_left--;
+            _beep_next = now + pdMS_TO_TICKS(BEEP_ON_MS);
+        }
+    }
+
+    // A stop while no job or manual operation runs (the tube turning on its own, a switch
+    // pressed by hand while Idle): the job task is not watching, so the screen warns. The
+    // start-up alarm, an alarm already seen, and the job task's own stops are left alone.
+    void TouchUi::watch_idle_stops() {
+        LiveStatus live = _owner.live();
+        if (!live.valid) {
+            return;
+        }
+        bool alarm = live.status.state == "Alarm";
+        bool first = !_watch_valid;
+        bool was   = _watch_alarm;
+        _watch_valid = true;
+        _watch_alarm = alarm;
+        if (!alarm) {
+            if (was) {
+                Lock l(_mutex);
+                _stop_handled = false;  // that stop is over: the next one is new
+            }
+            return;
+        }
+        if (first || was) {
+            return;
+        }
+        {
+            Lock l(_mutex);
+            bool quiet    = _running || _busy || _abort || _operator_stop || _stop_handled;
+            _stop_handled = true;
+            if (quiet) {
+                return;  // the job task deals with it, or the operator made it
+            }
+        }
+        warn("Stopped while no job or manual move was running (with X: ON, the tube stops too)." + switch_note(live.status) +
+             " Press Locate (or Manual, Home) before going on.");
     }
 
     void TouchUi::answer(const std::string& text, bool quit) {
@@ -1474,7 +1637,7 @@ namespace lathe {
     }
 
     void TouchUi::on_button(int id) {
-        beep();
+        // no click: the buzzer is kept for warnings
         Ask ask;
         {
             Lock l(_mutex);
@@ -1703,7 +1866,11 @@ namespace lathe {
             }
             case B_STOP: {
                 // FluidNC ends homing with alarm 6 and releases the motors (idle_ms rule);
-                // the job then asks "Try again?" as for any failed homing.
+                // the job then asks "Try again?" as for any failed homing, without a warning.
+                {
+                    Lock l(_mutex);
+                    _operator_stop = true;
+                }
                 uint8_t b = RT_SOFT_RESET;
                 _owner.outbox().push(&b, 1);
                 break;

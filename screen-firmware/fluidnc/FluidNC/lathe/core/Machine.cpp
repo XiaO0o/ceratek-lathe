@@ -151,23 +151,31 @@ namespace lathe {
         }
     }
 
+    int Machine::last_alarm(size_t mark) const {
+        int code = -1;
+        for (const auto& l : link.unsolicited.since(mark)) {
+            if (starts_with_nocase(l, "ALARM:")) {
+                std::string num = trim(l.substr(6));
+                code            = is_digits(num) ? std::atoi(num.c_str()) : 0;  // 0: an alarm without a number
+            }
+        }
+        return code;
+    }
+
+    std::string Machine::stop_reason(const Status& s, size_t mark) const {
+        if (s.has_pin(STOP_PIN)) {
+            return "the stop switch was pressed";
+        }
+        int code = last_alarm(mark);
+        if (code > 0) {
+            return "alarm " + std::to_string(code) + ": " + describe_alarm(code);
+        }
+        return "the controller raised an alarm";
+    }
+
     void Machine::stopped(const Status& s, const std::string& what) {
         needs_homing = true;
-        std::string last_alarm;
-        for (const auto& l : link.unsolicited.all()) {
-            if (starts_with_nocase(l, "ALARM:")) {
-                last_alarm = l;
-            }
-        }
-        std::string reason = s.has_pin(STOP_PIN) ? "the stop switch was pressed" : "the controller raised an alarm";
-        if (!last_alarm.empty() && !s.has_pin(STOP_PIN)) {
-            std::string num = trim(last_alarm.substr(6));
-            if (is_digits(num)) {
-                int code = std::atoi(num.c_str());
-                reason   = "alarm " + std::to_string(code) + ": " + describe_alarm(code);
-            }
-        }
-        throw Stopped(what + " was stopped: " + reason + ". Recover and home before continuing.");
+        throw Stopped(what + " was stopped: " + stop_reason(s) + ". Recover and home before continuing.");
     }
 
 }  // namespace lathe

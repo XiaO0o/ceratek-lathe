@@ -172,6 +172,7 @@ namespace lathe {
         handler.item("y_toward_tube", _y_toward_tube, -1, 1);
         handler.item("z_cut_direction", _z_cut_direction, -1, 1);
         handler.item("jog_feed_mm_per_min", _jog_feed_mm_per_min);
+        handler.item("switch_a_margin_mm", _switch_a_margin_mm);
     }
 
     CutSettings LatheScreen::cut_settings() const {
@@ -180,8 +181,10 @@ namespace lathe {
         if (::Machine::Axes::_axis[Z_AXIS]) {
             z_search = ::Machine::Axes::_axis[Z_AXIS]->_maxTravel;
         }
-        return CutSettings { _depth_step_mm, _cut_feed_mm_per_min, int(_y_toward_tube), int(_z_cut_direction), _jog_feed_mm_per_min,
-                             z_search,       _tube_rpm };
+        CutSettings s { _depth_step_mm, _cut_feed_mm_per_min, int(_y_toward_tube), int(_z_cut_direction), _jog_feed_mm_per_min,
+                        z_search,       _tube_rpm };
+        s.switch_a_margin_mm = _switch_a_margin_mm;
+        return s;
     }
 
     void LatheScreen::validate() {

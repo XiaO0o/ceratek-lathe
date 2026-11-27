@@ -41,6 +41,9 @@ namespace lathe {
         bool        aborted() override;
         bool        rotation_on() override { return _x_on; }
         bool        confirm(const std::string& prompt) override;
+        // A red WARNING line and three beeps (also called on the screen task, see watch_idle_stops)
+        void        warn(const std::string& text) override;
+        bool        stopped_on_purpose() override;
 
     private:
         enum class Ask { None, Number, Confirm, Move, Choice };
@@ -134,7 +137,8 @@ namespace lathe {
         void        draw_entry();
         int         draw_wrapped(const std::string& text, int x, int y, int w, int max_lines);
         std::vector<std::string> wrap(const std::string& text, int width);
-        void        beep();
+        void        update_beeper();     // plays the beeps warn() asked for, without waiting
+        void        watch_idle_stops();  // a stop while nothing runs: no job task sees it, so warn here
         bool        machine_moving();
         void        send_command(Do what, char axis = 0, double distance = 0, double feed = 0);
         void        draw_home_page();
@@ -174,6 +178,9 @@ namespace lathe {
         bool                    _abort       = false;   // the main-page button was pressed
         Choice                  _offer_answer = Choice::None;
         double                  _z_length = 0;      // measured switch C to switch A, mm
+        int                     _beep_request  = 0;      // beeps asked for by warn(), not yet started
+        bool                    _operator_stop = false;  // Stop during homing / X test reset: the next stop is no warning
+        bool                    _stop_handled  = false;  // the alarm now showing has been dealt with (warned, or planned)
 
         // screen task only
         std::vector<Button> _buttons;      // body buttons
@@ -185,10 +192,20 @@ namespace lathe {
         // travel speed mm/min. 0 until the job task has read them.
         volatile double     _tube_rpm  = 0;
         volatile double     _move_feed = 0;
+        // The depth step per round used last (kept in flash), offered first for the next tube;
+        // 0: config.yaml's depth_step_mm. Job task only.
+        double              _depth_step = 0;
         bool                _spinning  = false;  // job task only: the tube turns on its own (X: ON)
         void                load_speeds();
         void                save_speeds();
+        void                remember_depth_step(double step);
         CutSettings         settings_now();
+        // buzzer and the idle watch, screen task only
+        int                 _beeps_left  = 0;
+        bool                _beep_on     = false;
+        TickType_t          _beep_next   = 0;
+        bool                _watch_valid = false;  // a status has been seen
+        bool                _watch_alarm = false;  // the last status seen was Alarm
         uint32_t            _drawn_version = 0;
         std::string         _drawn_bar;
         TickType_t          _last_release = 0;  // last motor release asked for in alarm

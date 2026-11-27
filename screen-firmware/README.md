@@ -6,10 +6,26 @@ tube until switch A (wired as the probe input, G38.2), and return to the start c
 pass the operator answers whether the tube is right. The old diameter-based planner (passes.py port,
 vectors.txt) is gone. The turning tube axis is added later.
 
+**2026-11-26:**
+- Speeds: X (the tube) up to 200 rev/min, and the cut uses 200 by default. Y and Z go up to
+  960 mm/min (120 motor rev/min on the 8 mm lead). The moves themselves keep their slower speeds.
+- Each new tube starts by asking for the step per round toward the tube (0.01 to 10 mm). The
+  step used last is shown first and kept in flash.
+- A length that ends at switch A is cut 1 mm short (`switch_a_margin_mm`), so the cut does not
+  touch A again with the tool at depth.
+- Warnings: the buzzer (`beeper_pin: I2SO.7`) sounds only for a stop nobody planned, shown in red
+  as `WARNING:` on the screen. That means a switch touched during the depth steps, the cut, the
+  way back, a manual move or the free-turning tube, or a failed homing.
+  - Planned switch touches are messages only: homing at B and C, Locate and the length
+    measurement at A.
+  - Stops the operator makes are messages only: Main, or Stop during homing.
+  - The buttons no longer click.
+
 
 FluidNC v4.1.1 plus one added module, `lathe_screen`, that drives the MKS TS35-R on the MKS
 DLC32 and runs the operator's guided sequence on the controller, so the lathe can be used
-without a computer. FluidNC's motion, homing, limit and stop code is not changed.
+without a computer. FluidNC's motion, homing, limit and stop code is unchanged except for the two
+small changes in `Homing.cpp` and `Protocol.cpp` listed below (both under `#ifdef CERATEK_LATHE_SCREEN`).
 
 Step-by-step instructions (Chinese, Windows 10): [GUIDE-zh-Windows.md](GUIDE-zh-Windows.md). Design: the team's design doc.
 
@@ -18,7 +34,7 @@ Step-by-step instructions (Chinese, Windows 10): [GUIDE-zh-Windows.md](GUIDE-zh-
 ```
 lathe.bat + lathe.ps1          Windows: lathe setup / build / flash / config / monitor / restore / test
 lathe.sh                      the same commands on macOS / Linux (./lathe.sh ...)
-config/config_screen.yaml     the team's config.yaml + the lathe_screen: block (allow_motion: false)
+config/config_screen.yaml     the team's config.yaml + the lathe_screen: block (allow_motion: true since the S1-S3 screen tests)
 config/config_stock.yaml      the team's config.yaml as of commit 2adacb1, for going back
 fluidnc/                      copied over a FluidNC v4.1.1 checkout by lathe.sh
   platformio_override.ini     envs ceratek (no Wi-Fi), ceratek_wifi (8 MB layout), stock_wifi
@@ -34,8 +50,7 @@ fluidnc/                      copied over a FluidNC v4.1.1 checkout by lathe.sh
   FluidNC/src/Protocol.cpp    FluidNC's file, one change under #ifdef CERATEK_LATHE_SCREEN: a stop switch
                               pressed during homing leaves Homing before the motors are released, so
                               they no longer stay powered in the alarm state (heating, 2026-11-22)
-host-tests/                   PC tests (g++): ports of tests/test_*.py + 501 vectors from passes.py
-tools/make_vectors.py         regenerates host-tests/vectors.txt from the team's Python planner
+host-tests/                   PC tests (g++ or clang++): ports of tests/test_*.py and tests of the group's plan
 ```
 
 ## How it fits into FluidNC
@@ -54,7 +69,7 @@ FluidNC's polling task; core 1 (FluidNC's motion loop, priority 2) is left alone
 
 ## Status
 
-- Core logic: 43 PC tests pass, including byte-for-byte agreement with `passes.py` on 501 cases.
+- Core logic: 52 PC tests pass (2026-11-26, clang++ on macOS, no warnings).
 - 2026-11-21: built for the ESP32 (PlatformIO espressif32 6.10.0, Arduino core 2.0.17) and run on
   the bench board: screen, touch, inputs, homing (success, alarm 8, alarm 9), the guided job and the
   stop switch (T8) all worked. Fixes made after that run: limit pins rearmed at the start and end of
