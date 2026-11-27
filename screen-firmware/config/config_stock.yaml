@@ -1,0 +1,132 @@
+# FluidNC configuration for the Ceratek ceramic tube lathe.
+# Controller: MKS DLC32 V2.2, three TMC2209 drivers in stand-alone mode.
+# Written for FluidNC v4.1.1 (key names checked against that release's source).
+#
+# STATUS: bench configuration. Nothing here has run on the board yet.
+#   - Pin numbers are from the MKS DLC32 V2.1 drawings. The limit headers and the motor
+#     headers were confirmed on our V2.2 board (bench tests T3 and T4); the I2S and SD card
+#     pins were not checked separately.
+#   - Every value marked BENCH is a safe starting point for the stand-in motor. It is
+#     measured again on the machine and changed here, never in code.
+#
+# Axis roles (docs/hardware.md, "Planned lathe wiring"):
+#   X = tube rotation      unit: 1 revolution      no limit switch, no travel limit
+#   Y = depth of cut       unit: 1 mm              homes at the retracted end
+#   Z = feed along tube    unit: 1 mm              homes at the start end
+
+board: MKS DLC32 V2.2
+name: Ceratek tube lathe (bench)
+meta: 2026-11-14, bench configuration, not yet run
+
+kinematics:
+  Cartesian:
+
+stepping:
+  engine: I2S_STATIC       # step and direction go through the 74HC595 shift register
+  # BENCH: release the motors 250 ms after a move ends. With 255 (never release) the stand-in
+  # motor became too hot to touch within minutes on 2026-11-14, because the driver current has
+  # not been measured or set yet. The lathe needs 255 to hold its depth of cut; go back to it
+  # only after Vref has been set with a multimeter (docs/hardware.md, section 3).
+  idle_ms: 250
+  pulse_us: 4
+  dir_delay_us: 1
+  disable_delay_us: 0
+
+i2so:
+  bck_pin: gpio.16
+  data_pin: gpio.21
+  ws_pin: gpio.17
+
+axes:
+  shared_stepper_disable_pin: I2SO.0     # one enable line for all three drivers
+
+  x:                                     # tube rotation
+    steps_per_mm: 3200.000               # 200 steps x 16 microsteps = 1 revolution per unit (T4)
+    max_rate_mm_per_min: 120.000         # BENCH: 120 rev/min until T6 has measured the real limit
+    acceleration_mm_per_sec2: 2.000      # BENCH: 2 rev/s^2
+    max_travel_mm: 1000000.000           # unused: this axis turns without end
+    soft_limits: false
+    # no homing section: a rotating axis has nothing to find
+    motor0:
+      hard_limits: false
+      stepstick:
+        step_pin: I2SO.1
+        direction_pin: I2SO.2
+
+  y:                                     # depth of cut
+    steps_per_mm: 400.000                # 3200 steps per turn / 8 mm lead screw
+    max_rate_mm_per_min: 600.000         # BENCH
+    acceleration_mm_per_sec2: 50.000     # BENCH
+    max_travel_mm: 100.000               # BENCH: set from the real travel on the machine
+    soft_limits: true
+    homing:
+      cycle: 1                           # homed first: the tool retracts before anything else moves
+      positive_direction: false          # BENCH: decided by where the switch sits on the machine
+      mpos_mm: 0.000
+      feed_mm_per_min: 60.000
+      seek_mm_per_min: 300.000
+      settle_ms: 250
+      seek_scaler: 1.100
+      feed_scaler: 1.100
+    motor0:
+      limit_neg_pin: gpio.35:low         # "Y" header; the switch pulls the line to 0 V when pressed (T3)
+      hard_limits: true
+      pulloff_mm: 2.000
+      stepstick:
+        step_pin: I2SO.5
+        direction_pin: I2SO.6
+
+  z:                                     # feed along the tube
+    steps_per_mm: 400.000
+    max_rate_mm_per_min: 600.000         # BENCH
+    acceleration_mm_per_sec2: 50.000     # BENCH
+    max_travel_mm: 250.000               # BENCH: set from the real travel on the machine
+    soft_limits: true
+    homing:
+      cycle: 2
+      positive_direction: false          # BENCH
+      mpos_mm: 0.000
+      feed_mm_per_min: 60.000
+      seek_mm_per_min: 300.000
+      settle_ms: 250
+      seek_scaler: 1.100
+      feed_scaler: 1.100
+    motor0:
+      limit_neg_pin: gpio.34:low         # "Z" header
+      hard_limits: true
+      pulloff_mm: 2.000
+      stepstick:
+        step_pin: I2SO.3
+        direction_pin: I2SO.4
+
+control:
+  # The stop switch. While it is active FluidNC stops at once, raises a critical alarm, and
+  # refuses to unlock or home; after release it still needs a reset. On the bench the third
+  # limit switch on the "X" header plays this part (the rotation axis needs no limit input).
+  estop_pin: gpio.36:low
+  safety_door_pin: NO_PIN
+  reset_pin: NO_PIN
+  feed_hold_pin: NO_PIN
+  cycle_start_pin: NO_PIN
+
+probe:
+  pin: NO_PIN              # the "Probe" header (gpio.22) is not used
+
+coolant:
+  flood_pin: NO_PIN
+  mist_pin: NO_PIN
+
+spi:
+  miso_pin: gpio.12
+  mosi_pin: gpio.13
+  sck_pin: gpio.14
+
+sdcard:
+  cs_pin: gpio.15
+  card_detect_pin: NO_PIN
+
+start:
+  must_home: true          # after power-up or a stop, Y and Z must be homed before they move
+  check_limits: true
+
+NoSpindle:                 # the tube is turned by the X axis; nothing drives the laser/spindle output
