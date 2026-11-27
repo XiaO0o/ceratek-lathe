@@ -14,11 +14,7 @@ namespace lathe {
         if (stop_switch_pressed()) {
             throw MachineError("The stop switch is still pressed. Release it first.");
         }
-        needs_homing = true;
-        link.realtime(RT_SOFT_RESET);
-        sleep(_reset_wait_s);
-        double quiet = _reset_wait_s < 0.5 ? _reset_wait_s : 0.5;
-        link.drain(quiet, _reset_wait_s + 1, _reset_wait_s);
+        reset();
         Status s = status();
         if (s.has_pin(STOP_PIN)) {
             throw MachineError("The stop switch is still pressed. Release it first.");
@@ -73,15 +69,61 @@ namespace lathe {
 
     void Machine::spin(double rpm, int direction) {
         require_idle();
+        Status s  = status();
+        _spin_rpm = rpm;
+        _spin_dir = direction < 0 ? -1 : 1;
+        _spin_end = s.has_mpos && !s.mpos.empty() ? s.mpos[0] : 0;
+        send_spin_jog();
+    }
+
+    bool Machine::keep_spinning() {
+        Status s = status();
+        if (s.state != "Jog" || !s.has_mpos || s.mpos.empty()) {
+            return false;
+        }
+        if (_spin_dir * (_spin_end - s.mpos[0]) < MAX_TURNS_PER_MOVE / 2) {
+            send_spin_jog();  // FluidNC runs it straight after the one still running
+        }
+        return true;
+    }
+
+    void Machine::send_spin_jog() {
         char f[32];
-        std::snprintf(f, sizeof(f), "%g", rpm);
-        // 100000 turns: hours at any speed
-        command(std::string("$J=G91 G21 X") + (direction < 0 ? "-" : "") + "100000.0000 F" + f);
+        std::snprintf(f, sizeof(f), "%g", _spin_rpm);
+        command("$J=G91 G21 X" + fixed(_spin_dir * MAX_TURNS_PER_MOVE, 4) + " F" + f);
+        _spin_end += _spin_dir * MAX_TURNS_PER_MOVE;
     }
 
     void Machine::jog_cancel(double timeout_s) {
         link.realtime(RT_JOG_CANCEL);
         wait_until_idle(timeout_s);
+    }
+
+    bool Machine::stop_jog(double timeout_s, const std::function<void()>& before_reset) {
+        link.realtime(RT_JOG_CANCEL);
+        double deadline = _clock.now() + timeout_s;
+        while (true) {
+            if (!is_busy_state(status().state)) {
+                return true;  // Idle, or an alarm stopped it (reported where alarms are)
+            }
+            if (_clock.now() >= deadline) {
+                break;
+            }
+            sleep(_poll_s);
+        }
+        if (before_reset) {
+            before_reset();
+        }
+        reset();
+        return false;
+    }
+
+    void Machine::reset() {
+        needs_homing = true;
+        link.realtime(RT_SOFT_RESET);
+        sleep(_reset_wait_s);
+        double quiet = _reset_wait_s < 0.5 ? _reset_wait_s : 0.5;
+        link.drain(quiet, _reset_wait_s + 1, _reset_wait_s);
     }
 
     void Machine::require_idle() {

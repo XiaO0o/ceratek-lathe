@@ -20,6 +20,15 @@
 
 namespace lathe {
 
+    // FluidNC does its motion maths in 32-bit floats, so one move must not be too long. Seen on
+    // the board 2026-11-27: X: ON sent one move of 100000 turns (320 million steps). The tube
+    // crawled at about 0.7 rev/min instead of 200, and neither Pause nor a jog cancel stopped
+    // it, only a reset. Near 100000 a float cannot tell apart less than 0.008 turn (25 steps),
+    // more than FluidNC moves in one 10 ms piece while speeding up. Up to 16.7 million steps
+    // (5242 turns at 3200 steps per turn) every step counts. So no move turns the tube more
+    // than this; a longer run is sent as several moves, which FluidNC joins without a stop.
+    constexpr double MAX_TURNS_PER_MOVE = 1000.0;
+
     struct CutSettings {
         double depth_step_mm;        // how far each round moves the tool toward the tube
         double cut_feed_mm_per_min;  // speed of the depth steps, the length measurement and the cut
@@ -41,7 +50,8 @@ namespace lathe {
     };
 
     // The cut (machine coordinates): at the depth, back to the start of the length (no
-    // retreat from the tube), then along the length while the tube turns.
+    // retreat from the tube), then along the length while the tube turns. A cut of more than
+    // MAX_TURNS_PER_MOVE turns is sent as several equal moves that add up to it exactly.
     std::vector<std::string> cut_gcode(double depth_y, double start_z, double length, const CutSettings& settings);
 
     // Back to the start corner: out to Y 0, then along to Z 0.

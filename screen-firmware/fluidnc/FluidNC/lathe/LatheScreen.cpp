@@ -46,6 +46,13 @@ namespace lathe {
         return ::Machine::Axes::_axis[axis]->_maxRate;
     }
 
+    double LatheScreen::acceleration(int axis) const {
+        if (axis < 0 || axis >= MAX_N_AXIS || !::Machine::Axes::_axis[axis]) {
+            return 0;
+        }
+        return ::Machine::Axes::_axis[axis]->_acceleration;
+    }
+
 
     namespace {
         class Lock {

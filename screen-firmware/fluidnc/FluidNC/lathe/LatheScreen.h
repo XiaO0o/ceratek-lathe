@@ -129,6 +129,8 @@ namespace lathe {
         double travel(int axis) const;
         // Max rate of an axis from config.yaml (X: rev/min, Y and Z: mm/min); 0 if unknown.
         double max_rate(int axis) const;
+        // Acceleration of an axis from config.yaml (X: rev/s^2, Y and Z: mm/s^2); 0 if unknown.
+        double acceleration(int axis) const;
         ByteQueue&  inbox() { return _inbox; }
         ByteQueue&  outbox() { return _outbox; }
 

@@ -181,6 +181,8 @@ namespace lathe {
         int                     _beep_request  = 0;      // beeps asked for by warn(), not yet started
         bool                    _operator_stop = false;  // Stop during homing / X test reset: the next stop is no warning
         bool                    _stop_handled  = false;  // the alarm now showing has been dealt with (warned, or planned)
+        bool                    _spin_active   = false;  // the tube turns on its own (X: ON); set by the job task
+        bool                    _spin_stop     = false;  // Pause while it does: the job task makes sure it stopped
 
         // screen task only
         std::vector<Button> _buttons;      // body buttons

@@ -585,18 +585,127 @@ TEST(test_the_machine_waits_for_the_cutting_values_before_cutting) {
     CHECK(contains(r.lines_with("G1 X").at(0), "X30.000 Z10.000"));
 }
 
-TEST(test_x_on_turns_the_tube_by_a_long_relative_jog_and_is_refused_in_alarm) {
+TEST(test_x_on_turns_the_tube_in_jogs_short_enough_for_fluidnc_and_is_refused_in_alarm) {
     Rig r;
     r.lathe.spin(30);
-    CHECK_EQ(r.board.executed.back(), std::string("$J=G91 G21 X100000.0000 F30"));
+    // At most 1000 turns: one jog of 100000 turns crawled and could not be stopped (2026-11-27)
+    CHECK_EQ(r.board.executed.back(), std::string("$J=G91 G21 X1000.0000 F30"));
     r.lathe.jog_cancel();
     r.lathe.spin(10, -1);  // the X test runs it backward too
-    CHECK_EQ(r.board.executed.back(), std::string("$J=G91 G21 X-100000.0000 F10"));
+    CHECK_EQ(r.board.executed.back(), std::string("$J=G91 G21 X-1000.0000 F10"));
     r.lathe.jog_cancel();
     CHECK_EQ(r.lathe.status().state, std::string("Idle"));
 
     Rig locked(true);  // start-up alarm: the tube may not turn before homing
     CHECK(contains(expect_throw<MachineError>([&] { locked.lathe.spin(30); }), "alarm"));
+}
+
+// Jogs that run until the test moves X itself or ends them, as X: ON on the controller.
+static void hold_jogs(Rig& r, std::vector<std::string>& jogs) {
+    r.board.intercept = [&r, &jogs](const std::string& line) {
+        if (line.rfind("$J=", 0) != 0) {
+            return false;
+        }
+        jogs.push_back(line);
+        r.board.state = "Jog";
+        r.board.say("ok");
+        return true;
+    };
+}
+
+TEST(test_x_on_sends_the_next_jog_once_less_than_half_is_left_and_notices_a_stop) {
+    Rig                      r;
+    std::vector<std::string> jogs;
+    hold_jogs(r, jogs);
+    r.lathe.spin(200);
+    CHECK_EQ(jogs.size(), size_t(1));
+    r.board.pos[0] = 400;  // 600 of 1000 turns left: enough
+    CHECK(r.lathe.keep_spinning());
+    CHECK_EQ(jogs.size(), size_t(1));
+    r.board.pos[0] = 600;  // 400 left: the next jog follows on
+    CHECK(r.lathe.keep_spinning());
+    CHECK_EQ(jogs.size(), size_t(2));
+    CHECK_EQ(jogs.back(), std::string("$J=G91 G21 X1000.0000 F200"));
+    r.board.pos[0] = 1300;  // 700 of 2000 left
+    CHECK(r.lathe.keep_spinning());
+    CHECK_EQ(jogs.size(), size_t(2));
+    r.board.state = "Idle";  // a feed hold or a jog cancel ended it
+    CHECK(!r.lathe.keep_spinning());
+    CHECK_EQ(jogs.size(), size_t(2));
+
+    // backward, and an alarm (a switch) ends it as well
+    Rig                      b;
+    std::vector<std::string> back;
+    hold_jogs(b, back);
+    b.lathe.spin(60, -1);
+    b.board.pos[0] = -700;
+    CHECK(b.lathe.keep_spinning());
+    CHECK_EQ(back.size(), size_t(2));
+    CHECK_EQ(back.back(), std::string("$J=G91 G21 X-1000.0000 F60"));
+    b.board.alarm(1);
+    CHECK(!b.lathe.keep_spinning());
+}
+
+TEST(test_a_jog_that_a_cancel_does_not_end_is_stopped_by_a_reset) {
+    Rig r;
+    r.lathe.home();
+    CHECK(!r.lathe.needs_homing);
+    std::vector<std::string> jogs;
+    hold_jogs(r, jogs);
+    int resets_before = -1;
+    r.lathe.spin(200);
+    CHECK(r.lathe.stop_jog(0.05, [&] { resets_before = r.board.resets; }));  // the cancel ends it
+    CHECK_EQ(resets_before, -1);
+    CHECK_EQ(r.board.resets, 0);
+    CHECK(!r.lathe.needs_homing);
+
+    r.lathe.spin(200);
+    r.board.jog_cancel_ignored = true;  // as the 100000-turn jog on 2026-11-27
+    CHECK(!r.lathe.stop_jog(0.05, [&] { resets_before = r.board.resets; }));
+    CHECK_EQ(resets_before, 0);  // told before the reset
+    CHECK_EQ(r.board.resets, 1);
+    CHECK(r.lathe.needs_homing);  // the position is lost
+    CHECK(!is_busy_state(r.lathe.status().state));
+}
+
+static double gword(const std::string& line, char letter) {
+    size_t i = line.find(std::string(" ") + letter);
+    return i == std::string::npos ? 0 : std::atof(line.c_str() + i + 2);
+}
+
+TEST(test_a_cut_of_more_than_1000_turns_is_sent_as_equal_moves_that_add_up) {
+    CutSettings slow         = SETTINGS;
+    slow.cut_feed_mm_per_min = 2.0;
+    slow.tube_rpm            = 200.0;
+    // 50 mm at 2 mm/min = 25 minutes, at 200 rev/min = 5000 turns: five moves of 1000 turns
+    auto g = cut_gcode(3.0, 0.0, 50.0, slow);
+    CHECK_EQ(g.at(4), std::string("G91"));
+    CHECK_EQ(g.back(), std::string("G90"));
+    CHECK_EQ(g.size(), size_t(4 + 1 + 5 + 1));
+    for (size_t i = 5; i < 10; i++) {
+        CHECK_EQ(g[i], std::string("G1 X1000.000 Z10.000 F200.0"));
+    }
+
+    // 10.001 mm at 1 mm/min and 150 rev/min = 1500.15 turns: two moves, to the thousandth
+    slow.cut_feed_mm_per_min = 1.0;
+    slow.tube_rpm            = 150.0;
+    for (int dir : { 1, -1 }) {
+        slow.z_cut_direction = dir;
+        auto   h             = cut_gcode(3.0, 0.0, 10.001, slow);
+        double x = 0, z = 0;
+        int    moves = 0;
+        for (auto& l : h) {
+            if (l.rfind("G1 X", 0) == 0) {
+                moves++;
+                CHECK(gword(l, 'X') <= MAX_TURNS_PER_MOVE);
+                x += gword(l, 'X');
+                z += gword(l, 'Z');
+            }
+        }
+        CHECK_EQ(moves, 2);
+        CHECK_NEAR(x, 1500.15, 1e-9);
+        CHECK_NEAR(z, dir * 10.001, 1e-9);
+    }
 }
 
 TEST(test_with_the_third_axis_off_the_cut_runs_without_turning_the_tube) {

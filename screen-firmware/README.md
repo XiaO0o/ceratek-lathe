@@ -21,6 +21,19 @@ vectors.txt) is gone. The turning tube axis is added later.
   - Stops the operator makes are messages only: Main, or Stop during homing.
   - The buttons no longer click.
 
+**2026-11-27, found on the board with X: ON:**
+- X: ON sent one jog of 100000 turns. FluidNC does its motion maths in 32-bit floats, so the
+  tube crawled at about 0.7 rev/min instead of 200. Pause, X: OFF and a jog cancel could not
+  stop it; only a reset did.
+- Now no move turns the tube more than 1000 turns (`MAX_TURNS_PER_MOVE` in `lathe/core/Plan.h`).
+  While X is on, the screen sends the next jog before the last one runs out, so the tube turns
+  without a stop. A cut of more than 1000 turns is sent as several equal moves.
+- X: OFF, and Pause while the tube turns on its own, check that X really stopped. If it still
+  moves after its slow-down time plus 1.5 s, the controller is reset: a red WARNING, 3 beeps,
+  and Locate again.
+- Pause, a switch or an alarm during X: ON switch X off, so the tube does not start again by
+  itself.
+
 
 FluidNC v4.1.1 plus one added module, `lathe_screen`, that drives the MKS TS35-R on the MKS
 DLC32 and runs the operator's guided sequence on the controller, so the lathe can be used
@@ -69,7 +82,7 @@ FluidNC's polling task; core 1 (FluidNC's motion loop, priority 2) is left alone
 
 ## Status
 
-- Core logic: 52 PC tests pass (2026-11-26, clang++ on macOS, no warnings).
+- Core logic: 55 PC tests pass (2026-11-27, clang++ on macOS, no warnings).
 - 2026-11-21: built for the ESP32 (PlatformIO espressif32 6.10.0, Arduino core 2.0.17) and run on
   the bench board: screen, touch, inputs, homing (success, alarm 8, alarm 9), the guided job and the
   stop switch (T8) all worked. Fixes made after that run: limit pins rearmed at the start and end of

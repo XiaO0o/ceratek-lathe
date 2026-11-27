@@ -317,16 +317,58 @@ namespace lathe {
         link.drain(0.3, 2.0, 0.3);  // whatever FluidNC said at start-up
         load_speeds();
 
-        // X: ON turns the tube on its own whenever nothing else moves. Anything else the
-        // machine does stops it first; afterwards it turns again if X is still on.
+        // Safety net for motor heating: whenever the screen goes back to waiting (a job ended
+        // in any way, or a manual operation finished), switch the motors off if config.yaml
+        // says they are released when idle (idle_ms below 255). See LatheScreen::release_motors.
+        // Nothing moves; the next move enables the motors again.
+        auto release_motors = [&]() { _owner.release_motors(); };
+
+        // X: ON turns the tube on its own whenever nothing else moves, in jogs of at most 1000
+        // turns (Machine::spin). Anything else the machine does stops it first; afterwards it
+        // turns again if X is still on. A stop nobody asked the job task for (Pause, a switch,
+        // an alarm) switches X off, so the tube never starts again by itself after it.
+        auto set_spinning = [&](bool on) {
+            _spinning = on;
+            Lock l(_mutex);
+            _spin_active = on;
+            _spin_stop   = false;
+        };
+        // How long stopping the tube may take: slowing down from its speed at X's acceleration,
+        // and a margin.
+        auto spin_stop_s = [&]() {
+            double accel = _owner.acceleration(X_AXIS);
+            double slow  = accel > 0 ? double(_tube_rpm) / 60.0 / accel : 3.0;
+            return std::max(2.0, slow + 1.5);
+        };
+        // False when the tube did not stop when asked and the controller was reset to stop it
+        // (2026-11-27: a jog too long for FluidNC ignored Pause and X: OFF). Locate again then.
         auto stop_spin = [&]() {
-            if (_spinning) {
-                _spinning = false;
+            if (!_spinning) {
+                return true;
+            }
+            set_spinning(false);
+            auto before_reset = [&]() {
+                Lock l(_mutex);
+                _operator_stop = true;   // the reset's alarm is warned about below, not by the idle watch
+                _located       = false;  // the position is lost
+                _version++;
+            };
+            bool stopped;
+            try {
+                stopped = machine.stop_jog(spin_stop_s(), before_reset);
+            } catch (const std::exception&) {
+                before_reset();  // no answer to the status question: stop everything to be sure
                 try {
-                    machine.jog_cancel();
+                    machine.reset();
                 } catch (const std::exception&) {
                 }
+                stopped = false;
             }
+            if (!stopped) {
+                warn("X did not stop when asked, so the controller was reset: every motor stopped at once. "
+                     "Press Locate before going on.");
+            }
+            return stopped;
         };
         auto resume_spin = [&](bool tell) {
             if (!_x_on || _spinning) {
@@ -341,7 +383,7 @@ namespace lathe {
             }
             try {
                 machine.spin(_tube_rpm);
-                _spinning = true;
+                set_spinning(true);
                 if (tell) {
                     say(format("The tube turns at %.0f rev/min. X: OFF stops it.", double(_tube_rpm)));
                 }
@@ -349,14 +391,56 @@ namespace lathe {
                 if (tell) {
                     say(std::string("X: the tube cannot turn now: ") + e.what());
                 }
+                // If the jog started all the same, it must not turn on untracked: stop it.
+                try {
+                    if (is_busy_state(machine.status().state)) {
+                        set_spinning(true);
+                        stop_spin();
+                    }
+                } catch (const std::exception&) {
+                }
             }
         };
-
-        // Safety net for motor heating: whenever the screen goes back to waiting (a job ended
-        // in any way, or a manual operation finished), switch the motors off if config.yaml
-        // says they are released when idle (idle_ms below 255). See LatheScreen::release_motors.
-        // Nothing moves; the next move enables the motors again.
-        auto release_motors = [&]() { _owner.release_motors(); };
+        // Between commands, while the tube turns on its own: send the next jog in time, and
+        // notice a stop.
+        auto look_after_spin = [&]() {
+            bool pause;
+            {
+                Lock l(_mutex);
+                pause = _spin_stop;
+            }
+            std::string trouble;
+            if (!pause) {
+                try {
+                    if (machine.keep_spinning()) {
+                        return;
+                    }
+                } catch (const std::exception& e) {
+                    trouble = e.what();
+                }
+            }
+            // Pause (FluidNC ends a jog on a feed hold) or trouble: make sure it stopped.
+            // Otherwise it has stopped already (an alarm, a switch, the end of the last jog).
+            bool stopped = true;
+            if (pause || !trouble.empty()) {
+                stopped = stop_spin();
+            } else {
+                set_spinning(false);
+            }
+            _x_on      = false;
+            bool alarm = false;
+            try {
+                alarm = machine.status().alarmed();
+            } catch (const std::exception&) {
+            }
+            if (stopped && !alarm) {  // an alarm gets its WARNING from the idle watch on the screen task
+                say(std::string(pause ? "Pause: the tube stopped." : "X: the tube stopped.") +
+                    (trouble.empty() ? "" : " " + trouble) + " X is OFF now; X: ON turns it again.");
+            }
+            release_motors();
+            Lock l(_mutex);
+            _version++;
+        };
 
         // A stop that reached the screen: a WARNING (red, three beeps) unless the operator made
         // it. The switches pressed now are named, unless the text already does.
@@ -384,7 +468,13 @@ namespace lathe {
 
         while (true) {
             Command c;
-            xQueueReceive(_commands, &c, portMAX_DELAY);
+            // While the tube turns on its own, look after it four times a second between commands.
+            if (xQueueReceive(_commands, &c, _spinning ? pdMS_TO_TICKS(250) : portMAX_DELAY) != pdTRUE) {
+                if (_spinning) {
+                    look_after_spin();
+                }
+                continue;
+            }
             {
                 Lock l(_mutex);
                 _operator_stop = false;  // a new operation: an earlier own stop no longer counts
@@ -395,13 +485,21 @@ namespace lathe {
                 _version++;
                 continue;
             }
-            stop_spin();  // whatever comes next, the free-turning tube stops first
+            bool spin_stopped = stop_spin();  // whatever comes next, the free-turning tube stops first
+            if (!spin_stopped) {
+                // The reset has been warned about; while this command runs (busy) the idle watch
+                // is quiet anyway, and a later stop in it is a new one.
+                Lock l(_mutex);
+                _operator_stop = false;
+            }
 
             if (c.what == Do::SpinOn || c.what == Do::SpinOff) {
                 if (c.what == Do::SpinOn) {
                     resume_spin(true);
                 } else {
-                    say("X OFF: the tube stopped.");
+                    if (spin_stopped) {  // otherwise stop_spin() has warned about the reset
+                        say("X OFF: the tube stopped.");
+                    }
                     release_motors();
                 }
                 Lock l(_mutex);
@@ -1857,6 +1955,12 @@ namespace lathe {
             case B_PAUSE: {
                 uint8_t b = RT_FEED_HOLD;
                 _owner.outbox().push(&b, 1);
+                // While the tube turns on its own (X: ON), FluidNC ends the jog on a feed hold;
+                // the job task then makes sure it stopped, and switches X off.
+                Lock l(_mutex);
+                if (_spin_active) {
+                    _spin_stop = true;
+                }
                 break;
             }
             case B_RESUME: {

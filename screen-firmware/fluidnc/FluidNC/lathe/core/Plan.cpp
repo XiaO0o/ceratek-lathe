@@ -69,16 +69,35 @@ namespace lathe {
         double depth   = std::fabs(depth_y);
         double back    = depth > 2.0 ? 2.0 : depth / 2.0;
         double clear_y = depth_y - (depth_y < 0 ? -back : back);
-        return {
+        std::vector<std::string> g = {
             "G21 G90",
-            "G1 Y" + fixed(clear_y, 3) + " F" + cut,   // 2 mm back from the tube
-            "G1 Z" + fixed(start_z, 3) + " F" + cut,   // to the start of the length
-            "G1 Y" + fixed(depth_y, 3) + " F" + cut,   // in to the depth again
-            "G91",                                                         // the turning axis has no fixed zero
-            s.rotate ? "G1 X" + fixed(turns, 3) + " Z" + fixed(s.z_cut_direction * length, 3) + " F" + fixed(feed, 1)
-                     : "G1 Z" + fixed(s.z_cut_direction * length, 3) + " F" + cut,  // third axis off: no turning
-            "G90",
+            "G1 Y" + fixed(clear_y, 3) + " F" + cut,  // 2 mm back from the tube
+            "G1 Z" + fixed(start_z, 3) + " F" + cut,  // to the start of the length
+            "G1 Y" + fixed(depth_y, 3) + " F" + cut,  // in to the depth again
+            "G91",                                    // the turning axis has no fixed zero
         };
+        double z     = s.z_cut_direction * length;
+        int    moves = s.rotate ? int(std::ceil(turns / MAX_TURNS_PER_MOVE)) : 1;
+        if (!s.rotate) {
+            g.push_back("G1 Z" + fixed(z, 3) + " F" + cut);  // third axis off: no turning
+        } else if (moves <= 1) {
+            g.push_back("G1 X" + fixed(turns, 3) + " Z" + fixed(z, 3) + " F" + fixed(feed, 1));
+        } else {
+            // Too many turns for one move (see Plan.h): equal moves in thousandths, so that
+            // they add up to the whole cut exactly.
+            long long t_all = std::llround(turns * 1000), z_all = std::llround(z * 1000);
+            long long t_done = 0, z_done = 0;
+            for (int i = 1; i <= moves; i++) {
+                long long t_to = std::llround(double(t_all) * i / moves);
+                long long z_to = std::llround(double(z_all) * i / moves);
+                g.push_back("G1 X" + fixed((t_to - t_done) / 1000.0, 3) + " Z" + fixed((z_to - z_done) / 1000.0, 3) + " F" +
+                            fixed(feed, 1));
+                t_done = t_to;
+                z_done = z_to;
+            }
+        }
+        g.push_back("G90");
+        return g;
     }
 
     std::vector<std::string> return_gcode(const CutSettings& s) {
